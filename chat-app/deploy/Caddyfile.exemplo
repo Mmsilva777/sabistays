@@ -1,0 +1,8 @@
+# Acrescentar ao /etc/caddy/Caddyfile do servidor. O Caddy trata do HTTPS automaticamente.
+chat.sabistays-sal.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8787 {
+		# Mensagens em tempo real: não guardar em buffer
+		flush_interval -1
+	}
+}

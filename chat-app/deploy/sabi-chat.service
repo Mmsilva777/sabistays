@@ -1,0 +1,22 @@
+[Unit]
+Description=Chat interno Sabi Stays
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sabichat
+WorkingDirectory=/opt/sabistays/chat-app
+EnvironmentFile=/etc/sabi-chat.env
+ExecStart=/usr/bin/node server.mjs
+Restart=always
+RestartSec=3
+# Proteções básicas
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/sabi-chat
+
+[Install]
+WantedBy=multi-user.target

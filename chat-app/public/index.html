@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Sabi Stays · Chat</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0B5F66">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/img/logo-simbolo_cor.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <!-- Ecrã sem sessão -->
+  <section id="porta" class="porta" hidden>
+    <div class="porta-cartao">
+      <img src="/img/logo-simbolo_cor.svg" alt="" width="72" height="72">
+      <h1>Chat Sabi Stays</h1>
+      <p id="porta-texto">Este chat é privado. Para entrar, abre o link pessoal que recebeste de um dos sócios.</p>
+    </div>
+  </section>
+
+  <!-- Chat -->
+  <section id="app" class="app" hidden>
+    <header class="topo">
+      <img class="topo-logo" src="/img/logo-simbolo_cor.svg" alt="" width="38" height="38">
+      <div class="topo-titulo">
+        <strong>Sabi Stays · Sócios</strong>
+        <span id="estado">a ligar…</span>
+      </div>
+      <button id="btn-membros" class="icone" type="button" aria-label="Membros e convites" title="Membros e convites">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13Zm8 0c-.3 0-.6 0-1 .1a4.7 4.7 0 0 1 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5Z"/></svg>
+      </button>
+    </header>
+
+    <main id="lista" class="lista" aria-live="polite">
+      <div id="mais" class="mais" hidden><button type="button" id="btn-mais">Ver mensagens anteriores</button></div>
+    </main>
+
+    <div id="escrevendo" class="escrevendo" hidden>
+      <span class="pontos"><i></i><i></i><i></i></span> O Claude está a escrever…
+    </div>
+
+    <form id="compor" class="compor" autocomplete="off">
+      <button type="button" id="btn-claude" class="chip" title="Chamar o Claude">@claude</button>
+      <textarea id="texto" rows="1" placeholder="Mensagem" aria-label="Mensagem" maxlength="8000"></textarea>
+      <button type="submit" id="btn-enviar" class="enviar" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
+      </button>
+    </form>
+  </section>
+
+  <!-- Painel de membros -->
+  <aside id="painel" class="painel" hidden aria-label="Membros">
+    <div class="painel-caixa">
+      <header>
+        <h2>Membros</h2>
+        <button id="btn-fechar" class="icone" type="button" aria-label="Fechar">✕</button>
+      </header>
+      <ul id="membros" class="membros"></ul>
+
+      <div id="so-socios" hidden>
+        <h3>Convidar alguém</h3>
+        <p class="ajuda">O convidado recebe um link e só vê as mensagens a partir do momento em que entra.</p>
+        <form id="convidar" class="convidar">
+          <input id="conv-nome" type="text" placeholder="Nome (ex.: Ana, advogada)" maxlength="40" required>
+          <select id="conv-dias" aria-label="Duração do acesso">
+            <option value="7">7 dias</option>
+            <option value="30" selected>30 dias</option>
+            <option value="90">90 dias</option>
+            <option value="0">Sem prazo</option>
+          </select>
+          <button type="submit">Criar link</button>
+        </form>
+        <div id="link-caixa" class="link-caixa" hidden>
+          <p>Envia este link só a essa pessoa (WhatsApp, email):</p>
+          <input id="link-texto" type="text" readonly>
+          <button type="button" id="btn-copiar">Copiar link</button>
+        </div>
+        <h3>O que o Claude sabe</h3>
+        <p class="ajuda">Notas sobre a Sabi Stays que o Claude lê sempre que é chamado (números, decisões, contactos). Só os sócios veem e editam.</p>
+        <form id="contexto" class="contexto">
+          <textarea id="contexto-texto" rows="10" aria-label="O que o Claude sabe"></textarea>
+          <button type="submit">Guardar</button>
+          <span id="contexto-estado" class="ajuda"></span>
+        </form>
+        <p id="uso" class="ajuda"></p>
+      </div>
+
+      <h3>Como usar o Claude</h3>
+      <p class="ajuda">Escreve <b>@claude</b> numa mensagem e ele responde, tendo em conta a conversa recente e o contexto da Sabi Stays. Sem @claude, ele não intervém.</p>
+
+      <button id="btn-sair" class="sair" type="button">Sair deste dispositivo</button>
+    </div>
+  </aside>
+
+  <script src="/app.js"></script>
+</body>
+</html>

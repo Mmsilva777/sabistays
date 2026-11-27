@@ -1,0 +1,16 @@
+{
+  "name": "sabi-stays-chat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chat interno da Sabi Stays: sócios, convidados e o Claude quando chamado.",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "admin": "node admin.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0"
+  }
+}
