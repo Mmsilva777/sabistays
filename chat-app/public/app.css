@@ -185,3 +185,16 @@ button{font:inherit;cursor:pointer}
   .so-movel{display:grid}
 }
 @media (prefers-reduced-motion:reduce){.pastas{transition:none}}
+
+/* app instalável e notificações */
+.colar-link{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px;text-align:left}
+.colar-link label{flex-basis:100%;font-size:.85rem;color:var(--suave)}
+.colar-link input{flex:1;min-width:0;font:inherit;font-size:.9rem;padding:9px 11px;border:1px solid var(--linha);border-radius:10px;background:var(--fundo);color:var(--tinta)}
+.colar-link button{border:0;background:var(--azul);color:#fff;font-weight:600;padding:9px 14px;border-radius:10px}
+.aviso-app{display:flex;align-items:center;gap:8px;padding:8px 12px 8px 16px;background:var(--areia);color:#10302F;font-size:.88rem}
+.aviso-app span{flex:1;min-width:0}
+.aviso-app button{border:0;background:var(--azul);color:#fff;font-weight:600;font-size:.82rem;padding:6px 12px;border-radius:999px;white-space:nowrap}
+.aviso-app .fechar{background:none;color:#10302F;padding:6px 8px}
+.app-caixa button{border:0;background:var(--azul);color:#fff;font-weight:600;padding:9px 14px;border-radius:10px;margin:0 0 10px}
+.app-caixa button.secundario{background:none;border:1px solid var(--linha);color:var(--tinta)}
+.app-caixa .ajuda b{color:var(--tinta)}

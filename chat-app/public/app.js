@@ -58,6 +58,7 @@
     $("mais").hidden = mensagens.length < 150;
     desenharTudo();
     ligarEventos();
+    estadoApp();
     texto.focus();
   }
 
@@ -212,8 +213,9 @@
 
   function ligarEventos() {
     if (eventos) eventos.close();
-    eventos = new EventSource("/api/eventos");
+    eventos = new EventSource("/api/eventos" + (document.hidden ? "?visivel=0" : ""));
     eventos.addEventListener("open", () => atualizarEstado());
+    eventos.addEventListener("ola", (e) => { cid = JSON.parse(e.data).cid; });
     eventos.addEventListener("mensagem", (e) => juntarMensagem(JSON.parse(e.data)));
     eventos.addEventListener("presenca", (e) => {
       online = new Set(JSON.parse(e.data).online);
@@ -249,6 +251,13 @@
     const n = online.size;
     $("estado").textContent = `${ativos} membros + Claude · ${n} online`;
   }
+
+  // Diz ao servidor se o chat está à frente, para não mandar notificações a quem já está a ler.
+  let cid = null;
+  document.addEventListener("visibilitychange", () => {
+    if (!cid) return;
+    fetch("/api/visivel", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cid, visivel: !document.hidden }) }).catch(() => {});
+  });
 
   // Ao voltar à app (telemóvel), recarregar mensagens perdidas.
   document.addEventListener("visibilitychange", async () => {
@@ -383,6 +392,7 @@
   }
 
   $("btn-membros").addEventListener("click", async () => {
+    estadoApp();
     await carregarMembros();
     desenharMembros();
     $("so-socios").hidden = eu.role !== "socio";
@@ -446,6 +456,7 @@
 
   $("btn-sair").addEventListener("click", async () => {
     if (!confirm("Sair deste dispositivo? Para voltar a entrar vais precisar do teu link pessoal.")) return;
+    await desligarNotificacoes().catch(() => {});
     await pedir("/api/sair", { method: "POST", body: "{}" });
     if (eventos) eventos.close();
     mostrarPorta("Saíste. Para voltar a entrar, abre o teu link pessoal.");
@@ -804,9 +815,147 @@
   });
   $("pastas-pesquisa").addEventListener("keydown", (e) => { if (e.key === "Enter") fecharPastas(); });
 
+  // ---------- app instalável e notificações ----------
+
+  const ua = navigator.userAgent;
+  const ehIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const ehAndroid = /Android/.test(ua);
+  const instalada = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const temPush = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  let pedidoInstalar = null;
+  let registo = null;
+
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker.register("/sw.js").then((r) => { registo = r; estadoApp(); }).catch(() => {});
   }
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    pedidoInstalar = e;
+    estadoApp();
+  });
+  window.addEventListener("appinstalled", () => { pedidoInstalar = null; estadoApp(); });
+
+  function chaveBytes(b64) {
+    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+
+  async function subscricaoAtual() {
+    if (!temPush) return null;
+    const r = registo || (await navigator.serviceWorker.ready);
+    return r.pushManager.getSubscription();
+  }
+
+  async function ligarNotificacoes() {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") return estadoApp();
+    const r = registo || (await navigator.serviceWorker.ready);
+    const { chave } = await pedir("/api/push");
+    let sub = await r.pushManager.getSubscription();
+    if (!sub) sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveBytes(chave) });
+    await pedir("/api/push", { method: "POST", body: JSON.stringify({ sub: sub.toJSON() }) });
+    estadoApp();
+  }
+
+  async function desligarNotificacoes() {
+    const sub = await subscricaoAtual();
+    if (!sub) return;
+    await pedir("/api/push", { method: "DELETE", body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {});
+    await sub.unsubscribe();
+    estadoApp();
+  }
+
+  async function estadoApp() {
+    if (!eu) return;
+    // Instalação
+    let ajuda = "";
+    if (instalada()) ajuda = "✓ Estás a usar o chat como app.";
+    else if (pedidoInstalar) ajuda = "Instala o chat como app: fica com o ícone da Sabi Stays e abre numa janela própria.";
+    else if (ehIOS) ajuda = "No iPhone: abre este link no <b>Safari</b>, toca em <b>Partilhar</b> (quadrado com seta) e depois em <b>Adicionar ao ecrã principal</b>. Ao abrir a app pela primeira vez, cola o teu link pessoal.";
+    else if (ehAndroid) ajuda = "No Android: no Chrome, toca no menu <b>⋮</b> e depois em <b>Instalar app</b> (ou <b>Adicionar ao ecrã principal</b>).";
+    else ajuda = "No PC: no Chrome ou no Edge, clica no ícone de instalar à direita da barra de endereço (ou menu <b>⋮</b> → <b>Instalar Sabi Chat</b>). Depois aparece no menu Iniciar e na barra de tarefas.";
+    $("instalar-ajuda").innerHTML = ajuda;
+    $("btn-instalar").hidden = !pedidoInstalar || instalada();
+
+    // Notificações
+    const b = $("btn-notif");
+    let estado = "";
+    let ativo = false;
+    if (!temPush) {
+      estado = ehIOS && !instalada() ? "No iPhone, as notificações só funcionam depois de instalares a app no ecrã principal (iOS 16.4 ou mais recente)." : "Este browser não suporta notificações.";
+      b.hidden = true;
+    } else if (Notification.permission === "denied") {
+      estado = "As notificações estão bloqueadas. Ativa-as nas definições do browser ou do telemóvel para este site.";
+      b.hidden = true;
+    } else {
+      const sub = await subscricaoAtual().catch(() => null);
+      if (sub && Notification.permission === "granted") {
+        const r = await pedir("/api/push?endpoint=" + encodeURIComponent(sub.endpoint)).catch(() => ({}));
+        ativo = !!r.ativo;
+        if (!ativo) await pedir("/api/push", { method: "POST", body: JSON.stringify({ sub: sub.toJSON() }) }).then(() => (ativo = true)).catch(() => {});
+      }
+      estado = ativo
+        ? "✓ Notificações ativas neste aparelho: recebes as mensagens novas quando não tens o chat aberto, e um aviso especial quando alguém te menciona (@" + escapar(eu.name.split(/\s+/)[0]) + ")."
+        : "Recebe um aviso no telemóvel ou no PC quando chega uma mensagem e não tens o chat aberto.";
+      b.hidden = false;
+      b.textContent = ativo ? "Desligar notificações" : "Ativar notificações";
+      b.classList.toggle("secundario", ativo);
+      b.dataset.ativo = ativo ? "1" : "";
+    }
+    $("notif-estado").innerHTML = estado;
+
+    // Aviso no topo do chat (até ser fechado)
+    let fechado = false;
+    try { fechado = localStorage.getItem("sabi-aviso-app") === "1"; } catch {}
+    const falta = !instalada() || (temPush && !ativo && Notification.permission !== "denied");
+    $("aviso-app").hidden = fechado || !falta;
+    $("aviso-app-texto").textContent = instalada() ? "Ativa as notificações para saberes quando chegam mensagens." : "Instala o chat como app no telemóvel e no PC.";
+  }
+
+  $("btn-instalar").addEventListener("click", async () => {
+    if (!pedidoInstalar) return;
+    pedidoInstalar.prompt();
+    await pedidoInstalar.userChoice.catch(() => {});
+    pedidoInstalar = null;
+    estadoApp();
+  });
+  $("btn-notif").addEventListener("click", async () => {
+    const b = $("btn-notif");
+    b.disabled = true;
+    try {
+      if (b.dataset.ativo) await desligarNotificacoes();
+      else await ligarNotificacoes();
+    } catch (err) {
+      alert("Não foi possível ativar as notificações: " + err.message);
+    } finally {
+      b.disabled = false;
+    }
+  });
+  $("btn-aviso-app").addEventListener("click", async () => {
+    if (pedidoInstalar && !instalada()) return $("btn-instalar").click();
+    if (instalada() && temPush) return $("btn-notif").click();
+    $("btn-membros").click();
+    setTimeout(() => $("app-titulo").scrollIntoView({ block: "start" }), 50);
+  });
+  $("btn-aviso-fechar").addEventListener("click", () => {
+    $("aviso-app").hidden = true;
+    try { localStorage.setItem("sabi-aviso-app", "1"); } catch {}
+  });
+
+  // Entrar colando o link (a app instalada no iPhone não partilha a sessão do Safari).
+  $("colar-link").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const v = $("colar-link-texto").value.trim();
+    const token = v.includes("#") ? v.slice(v.indexOf("#") + 1) : v;
+    try {
+      await pedir("/api/entrar", { method: "POST", body: JSON.stringify({ token: decodeURIComponent(token) }) });
+      $("colar-link-texto").value = "";
+      entrar();
+    } catch {
+      $("porta-texto").textContent = "Esse link não é válido. Confirma que copiaste o link completo, ou pede um novo a um dos sócios.";
+    }
+  });
 
   entrar();
 })();
