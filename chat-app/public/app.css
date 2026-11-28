@@ -34,7 +34,8 @@ button{font:inherit;cursor:pointer}
 .porta-cartao p{color:var(--suave);margin:0}
 
 /* estrutura */
-.app{height:100%;height:100dvh;display:flex;flex-direction:column;max-width:860px;margin:0 auto;background:var(--fundo)}
+.app{height:100%;height:100dvh;display:flex;max-width:1240px;margin:0 auto;background:var(--fundo)}
+.chat{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
 .topo{display:flex;align-items:center;gap:12px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));background:var(--azul);color:#fff}
 .topo-logo{background:#fff;border-radius:50%;padding:3px}
 .topo-titulo{display:flex;flex-direction:column;min-width:0;flex:1}
@@ -129,7 +130,7 @@ button{font:inherit;cursor:pointer}
 .tema{font-size:.68rem;font-weight:600;color:var(--azul);background:rgba(24,140,150,.12);padding:1px 7px;border-radius:999px}
 
 /* arquivo */
-.arquivo{position:fixed;inset:0;z-index:9;background:var(--fundo);display:flex;flex-direction:column;max-width:860px;margin:0 auto}
+.arquivo{position:absolute;inset:0;z-index:9;background:var(--fundo);display:flex;flex-direction:column}
 .arquivo-barra{display:flex;gap:8px;padding:10px 16px}
 .arquivo-barra input{flex:1;min-width:0;font:inherit;padding:9px 12px;border:1px solid var(--linha);border-radius:10px;background:var(--cartao);color:var(--tinta)}
 .arquivo-barra button,.descarregar{border:0;background:var(--azul);color:#fff;font-weight:600;padding:9px 12px;border-radius:10px;font-size:.85rem;text-decoration:none;white-space:nowrap}
@@ -155,3 +156,32 @@ button{font:inherit;cursor:pointer}
 .largar{position:fixed;inset:0;z-index:20;background:rgba(11,95,102,.82);display:grid;place-items:center;pointer-events:none}
 .largar div{border:3px dashed #fff;border-radius:24px;padding:40px 32px;color:#fff;font-weight:600;font-size:1.3rem;text-align:center;max-width:90%}
 .largar small{display:block;font-weight:400;font-size:.9rem;opacity:.9;margin-top:6px}
+
+/* pastas (barra lateral dos temas) */
+.pastas{width:290px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;background:var(--cartao);border-right:1px solid var(--linha);padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top));overflow:hidden}
+.pastas-topo{display:flex;align-items:center;justify-content:space-between;min-height:40px}
+.pastas-topo strong{font-size:1.05rem;font-weight:600}
+.pastas-topo .icone{color:var(--tinta)}
+.pastas-topo .icone:hover{background:rgba(16,48,47,.08)}
+.pastas input{font:inherit;font-size:.9rem;padding:8px 11px;border:1px solid var(--linha);border-radius:10px;background:var(--fundo);color:var(--tinta);width:100%}
+.pastas-lista{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:0 -4px;padding:0 4px}
+.pasta{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;border:0;background:none;color:var(--tinta);padding:8px;border-radius:10px}
+.pasta:hover{background:rgba(24,140,150,.08)}
+.pasta.ativa{background:rgba(24,140,150,.16)}
+.pasta .ic{font-size:1.25rem;line-height:1.2}
+.pasta-txt{min-width:0;flex:1;display:flex;flex-direction:column}
+.pasta-txt b{font-weight:600;font-size:.92rem;display:flex;justify-content:space-between;gap:6px}
+.pasta-txt b em{font-style:normal;font-weight:400;font-size:.75rem;color:var(--suave)}
+.pasta-txt small{color:var(--suave);font-size:.78rem;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pastas-estado{margin:0;font-size:.75rem}
+.pastas-tudo{border:1px solid var(--linha);background:none;color:var(--azul);font-weight:600;font-size:.85rem;padding:8px;border-radius:10px}
+.pastas-fundo{display:none}
+.so-movel{display:none}
+@media (min-width:900px){.pastas-topo .icone{display:none}}
+@media (max-width:899px){
+  .pastas{position:fixed;left:0;top:0;bottom:0;width:min(320px,86%);z-index:12;transform:translateX(-102%);transition:transform .2s;box-shadow:2px 0 16px rgba(0,0,0,.25)}
+  .pastas.aberta{transform:none}
+  .pastas-fundo{display:block;position:fixed;inset:0;z-index:11;background:rgba(16,48,47,.45)}
+  .so-movel{display:grid}
+}
+@media (prefers-reduced-motion:reduce){.pastas{transition:none}}

@@ -23,7 +23,25 @@
 
   <!-- Chat -->
   <section id="app" class="app" hidden>
+    <!-- Pastas dos temas (só sócios): barra à esquerda no computador, gaveta no telemóvel -->
+    <aside id="pastas" class="pastas" hidden aria-label="Pastas do arquivo">
+      <header class="pastas-topo">
+        <strong>Pastas</strong>
+        <button id="btn-pastas-fechar" class="icone" type="button" aria-label="Fechar pastas">✕</button>
+      </header>
+      <input id="pastas-pesquisa" type="search" placeholder="Pesquisar no arquivo" aria-label="Pesquisar no arquivo">
+      <button id="pasta-memoria" class="pasta" type="button"><span class="ic">🧠</span><span class="pasta-txt"><b>Memória do Claude</b><small id="pasta-memoria-n"></small></span></button>
+      <nav id="pastas-lista" class="pastas-lista"></nav>
+      <p id="pastas-estado" class="ajuda pastas-estado"></p>
+      <button id="btn-pastas-tudo" class="pastas-tudo" type="button">Ver arquivo completo</button>
+    </aside>
+    <div id="pastas-fundo" class="pastas-fundo" hidden></div>
+
+    <div class="chat">
     <header class="topo">
+      <button id="btn-pastas" class="icone so-movel" type="button" aria-label="Abrir pastas" title="Pastas" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6Zm0 5h18v2H3v-2Zm0 5h18v2H3v-2Z"/></svg>
+      </button>
       <img class="topo-logo" src="/img/logo-simbolo_cor.svg" alt="" width="38" height="38">
       <div class="topo-titulo">
         <strong>Sabi Stays · Sócios</strong>
@@ -62,9 +80,6 @@
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
       </button>
     </form>
-  </section>
-
-  <div id="largar" class="largar" hidden><div>Larga aqui para enviar<small>fotos, vídeos, PDFs, zips (até 50 MB cada)</small></div></div>
 
   <!-- Arquivo por temas -->
   <section id="arquivo" class="arquivo" hidden aria-label="Arquivo">
@@ -79,6 +94,10 @@
     </div>
     <div id="arquivo-conteudo" class="arquivo-conteudo"></div>
   </section>
+    </div>
+  </section>
+
+  <div id="largar" class="largar" hidden><div>Larga aqui para enviar<small>fotos, vídeos, PDFs, zips (até 50 MB cada)</small></div></div>
 
   <!-- Painel de membros -->
   <aside id="painel" class="painel" hidden aria-label="Membros">

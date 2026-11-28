@@ -51,6 +51,7 @@
     $("app").hidden = false;
     await carregarMembros();
     $("btn-arquivo").hidden = eu.role !== "socio";
+    $("pastas").hidden = $("btn-pastas").hidden = eu.role !== "socio";
     if (eu.role === "socio") await carregarNomesTemas();
     const r = await pedir("/api/mensagens");
     mensagens = r.mensagens;
@@ -221,8 +222,7 @@
     });
     eventos.addEventListener("arquivo", async (e) => {
       const { temas } = JSON.parse(e.data);
-      const novos = Object.values(temas).flat().some((t) => !nomesTemas[t]);
-      if (novos) await carregarNomesTemas();
+      if (eu.role === "socio") await carregarNomesTemas();
       for (const m of mensagens) if (temas[m.id]) m.temas = temas[m.id];
       desenharTudo(true);
       if (!$("arquivo").hidden && !temaAberto) abrirArquivo();
@@ -402,7 +402,7 @@
     if (e.target === $("painel")) $("painel").hidden = true;
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { $("painel").hidden = true; $("arquivo").hidden = true; }
+    if (e.key === "Escape") { $("painel").hidden = true; $("arquivo").hidden = true; fecharPastas(); marcarPasta(null); }
   });
 
   $("convidar").addEventListener("submit", async (e) => {
@@ -658,6 +658,7 @@
     try {
       const r = await pedir("/api/arquivo");
       nomesTemas = Object.fromEntries(r.temas.map((t) => [t.id, t.nome]));
+      desenharPastas(r);
       return r;
     } catch {
       return null;
@@ -684,6 +685,7 @@
     html += `</div>`;
     html += `<form id="novo-tema" class="convidar"><input id="novo-tema-nome" placeholder="Novo tema (ex.: Boa Vista)" maxlength="60" required><button type="submit">Criar tema</button></form>`;
     cx.innerHTML = html;
+    marcarPasta(null);
     cx.querySelectorAll(".tema-cartao").forEach((b) => (b.onclick = () => abrirTema(b.dataset.tema)));
     $("novo-tema").onsubmit = async (e) => {
       e.preventDefault();
@@ -703,6 +705,7 @@
 
   async function abrirTema(id) {
     temaAberto = id;
+    marcarPasta(id);
     const { tema: t } = await pedir("/api/arquivo/temas/" + id);
     let html = `<p><a class="descarregar" href="/api/arquivo/temas/${t.id}.md">Descarregar este tema (.md)</a></p>`;
     html += `<h3>Resumo</h3><div class="resumo">${t.resumo ? markdown(t.resumo) : "<p class='ajuda'>Ainda sem resumo.</p>"}</div>`;
@@ -722,7 +725,7 @@
     $("arquivo").hidden = false;
     abrirArquivo();
   });
-  $("btn-arquivo-fechar").addEventListener("click", () => ($("arquivo").hidden = true));
+  $("btn-arquivo-fechar").addEventListener("click", () => { $("arquivo").hidden = true; marcarPasta(null); });
   $("btn-arquivo-voltar").addEventListener("click", abrirArquivo);
   $("btn-arquivar-agora").addEventListener("click", async () => {
     try {
@@ -746,6 +749,60 @@
       $("btn-arquivo-voltar").hidden = false;
     }, 300);
   });
+
+  // ---------- pastas (barra lateral) ----------
+
+  function desenharPastas(r) {
+    const lista = $("pastas-lista");
+    const ativa = lista.querySelector(".pasta.ativa")?.dataset.tema || null;
+    lista.innerHTML = r.temas
+      .slice()
+      .sort((a, b) => (b.mensagens + b.itens) - (a.mensagens + a.itens))
+      .map((t) => {
+        const resumo = t.resumo ? t.resumo.replace(/[*#`_>]/g, "").replace(/\s+/g, " ").trim().slice(0, 120) : "Ainda sem resumo";
+        return `<button type="button" class="pasta" data-tema="${t.id}"><span class="ic">${t.mensagens || t.itens ? "📂" : "📁"}</span><span class="pasta-txt"><b>${escapar(t.nome)}<em>${t.mensagens}</em></b><small>${escapar(resumo)}</small></span></button>`;
+      })
+      .join("");
+    lista.querySelectorAll(".pasta").forEach((b) => (b.onclick = () => abrirPasta(b.dataset.tema)));
+    marcarPasta(ativa && !$("arquivo").hidden ? ativa : null);
+    $("pasta-memoria-n").textContent = r.factos.length ? `${r.factos.length} factos guardados` : "Ainda vazia";
+    $("pastas-estado").textContent = r.ultimaExecucao
+      ? `Atualizado ${fmtData.format(new Date(r.ultimaExecucao))}${r.pendentes ? ` · ${r.pendentes} por arquivar` : ""}`
+      : "Ainda não foi arquivado nada.";
+  }
+  function marcarPasta(id) {
+    $("pastas-lista").querySelectorAll(".pasta").forEach((b) => b.classList.toggle("ativa", b.dataset.tema === id));
+    $("pasta-memoria").classList.toggle("ativa", id === "memoria");
+  }
+  function abrirPastas() { $("pastas").classList.add("aberta"); $("pastas-fundo").hidden = false; }
+  function fecharPastas() { $("pastas").classList.remove("aberta"); $("pastas-fundo").hidden = true; }
+  function abrirPasta(id) {
+    $("arquivo").hidden = false;
+    abrirTema(id);
+    fecharPastas();
+  }
+  $("btn-pastas").addEventListener("click", abrirPastas);
+  $("btn-pastas-fechar").addEventListener("click", fecharPastas);
+  $("pastas-fundo").addEventListener("click", fecharPastas);
+  $("btn-pastas-tudo").addEventListener("click", () => { $("arquivo").hidden = false; abrirArquivo(); fecharPastas(); });
+  $("pasta-memoria").addEventListener("click", async () => {
+    $("arquivo").hidden = false;
+    await abrirArquivo();
+    marcarPasta("memoria");
+    fecharPastas();
+  });
+  let pastasTimer = null;
+  $("pastas-pesquisa").addEventListener("input", () => {
+    clearTimeout(pastasTimer);
+    pastasTimer = setTimeout(() => {
+      const q = $("pastas-pesquisa").value;
+      $("arquivo").hidden = false;
+      $("arquivo-pesquisa").value = q;
+      $("arquivo-pesquisa").dispatchEvent(new Event("input"));
+      if (q.trim().length >= 2) marcarPasta(null);
+    }, 300);
+  });
+  $("pastas-pesquisa").addEventListener("keydown", (e) => { if (e.key === "Enter") fecharPastas(); });
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
