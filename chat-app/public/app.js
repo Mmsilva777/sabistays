@@ -828,6 +828,7 @@
   const temPush = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   let pedidoInstalar = null;
   let registo = null;
+  let notifAtivo = false;
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").then((r) => { registo = r; estadoApp(); }).catch(() => {});
@@ -859,37 +860,104 @@
 
   function desenharBoasVindas() {
     if ($("boas-vindas").hidden && !linkUsado) return;
-    const ehSafariIOS = ehIOS && !/CriOS|FxiOS|EdgiOS/.test(ua);
-    let passos = [];
-    let nota = "";
-    $("bv-instalar").hidden = !pedidoInstalar;
-    $("bv-copiar").hidden = !ehIOS;
+    const g = guia(linkUsado);
+    $("bv-instalar").hidden = !g.instalar;
+    $("bv-copiar").hidden = !g.copiar;
+    $("bv-links").innerHTML = g.links.map((l, n) => `<a href="${escapar(l.href)}"${l.download ? " download" : ""} class="${n ? "secundario" : ""}">${l.texto}</a>`).join("");
+    $("bv-passos").innerHTML = g.passos.map((p) => `<li>${p}</li>`).join("");
+    $("bv-nota").innerHTML = g.nota;
+    const podeNotif = temPush && Notification.permission === "default";
+    $("bv-notif").hidden = !podeNotif && !notifAtivo;
+    $("bv-notif").disabled = notifAtivo;
+    $("bv-notif").textContent = notifAtivo ? "🔔 Notificações ativas ✓" : "🔔 Ativar notificações";
+  }
+
+  // Deteção do sistema e do browser, para mostrar a forma certa de instalar.
+  function navegador() {
+    const so = ehIOS ? "ios" : ehAndroid ? "android" : /Windows/.test(ua) ? "windows" : /Macintosh|Mac OS X/.test(ua) ? "mac" : "linux";
+    const br = /FxiOS|Firefox\//.test(ua) ? "firefox"
+      : /SamsungBrowser/.test(ua) ? "samsung"
+      : /EdgiOS|EdgA?\//.test(ua) ? "edge"
+      : /OPR\/|OPiOS|Opera/.test(ua) ? "opera"
+      : /CriOS|Chrome\//.test(ua) ? "chrome"
+      : /Safari\//.test(ua) ? "safari" : "outro";
+    return { so, br, chromium: ["chrome", "edge", "opera", "samsung"].includes(br) };
+  }
+
+  // Passos, botões e links para instalar neste aparelho. link = link pessoal (só no ecrã de boas-vindas).
+  function guia(link) {
+    const { so, br, chromium } = navegador();
+    const g = { passos: [], links: [], nota: "", instalar: false, copiar: false };
+    const destino = link || location.origin + "/";
+    const colarNaApp = "Abre a app <b>Sabi Chat</b> no ecrã principal, cola o link e carrega em <b>Entrar</b>.";
+    if (instalada()) { g.nota = "✓ Já estás a usar a app."; return g; }
     if (pedidoInstalar) {
-      passos = [];
-      nota = "Carrega em <b>Instalar app</b> e confirma. Ficas logo com a sessão iniciada.";
-    } else if (ehIOS) {
-      passos = [
-        "Carrega em <b>Copiar o meu link</b> (vais precisar dele no passo 4).",
-        ehSafariIOS ? "Toca em <b>Partilhar</b> (o quadrado com a seta para cima)." : "Abre este link no <b>Safari</b> e toca em <b>Partilhar</b> (o quadrado com a seta).",
-        "Escolhe <b>Adicionar ao ecrã principal</b> e depois <b>Adicionar</b>.",
-        "Abre a app <b>Sabi Chat</b> no ecrã principal, cola o link e carrega em <b>Entrar</b>.",
-        "Dentro da app: botão de membros → <b>Ativar notificações</b>.",
-      ];
-    } else if (ehAndroid) {
-      passos = [
-        "No Chrome, toca no menu <b>⋮</b> (canto superior direito).",
-        "Escolhe <b>Instalar app</b> (ou <b>Adicionar ao ecrã principal</b>) e confirma.",
-        "Abre a <b>Sabi Chat</b> no ecrã principal e ativa as notificações.",
-      ];
-    } else {
-      passos = [
-        "Usa o <b>Chrome</b> ou o <b>Edge</b>.",
-        "Clica no ícone de instalar à direita da barra de endereço (ou menu <b>⋮</b> → <b>Instalar Sabi Chat</b>).",
-        "A app fica no menu Iniciar e na barra de tarefas. Ativa as notificações quando ela pedir.",
-      ];
+      g.instalar = true;
+      g.nota = "Carrega em <b>Instalar app</b> e confirma. Ficas logo com a sessão iniciada.";
+      return g;
     }
-    $("bv-passos").innerHTML = passos.map((p) => `<li>${p}</li>`).join("");
-    $("bv-nota").innerHTML = nota;
+    if (so === "ios") {
+      g.copiar = !!link;
+      if (br === "safari") {
+        g.passos = [
+          link ? "Carrega em <b>Copiar o meu link</b> (vais precisar dele no passo 4)." : "Tem à mão o teu link pessoal (vais precisar dele no passo 4).",
+          "Toca em <b>Partilhar</b> (o quadrado com a seta para cima).",
+          "Escolhe <b>Adicionar ao ecrã principal</b> e depois <b>Adicionar</b>.",
+          colarNaApp,
+        ];
+      } else {
+        g.links.push({ texto: "Abrir no Safari", href: "x-safari-" + destino });
+        g.passos = [
+          link ? "Carrega em <b>Copiar o meu link</b>." : "Tem à mão o teu link pessoal.",
+          "Carrega em <b>Abrir no Safari</b>. No Safari, toca em <b>Partilhar</b> → <b>Adicionar ao ecrã principal</b>.",
+          colarNaApp,
+          `Em iOS recente também dá diretamente no ${br === "firefox" ? "Firefox" : br === "edge" ? "Edge" : "Chrome"}: <b>Partilhar</b> → <b>Adicionar ao ecrã principal</b>.`,
+        ];
+      }
+      return g;
+    }
+    if (so === "android") {
+      if (br === "firefox") g.passos = ["No Firefox, toca no menu <b>⋮</b>.", "Escolhe <b>Instalar</b> (ou <b>Adicionar ao ecrã principal</b>) e confirma.", "Abre a <b>Sabi Chat</b> no ecrã principal."];
+      else if (br === "samsung") g.passos = ["No Samsung Internet, toca no menu <b>≡</b>.", "Escolhe <b>Adicionar página a</b> → <b>Ecrã principal</b>.", "Abre a <b>Sabi Chat</b> no ecrã principal."];
+      else g.passos = ["Toca no menu <b>⋮</b> (canto superior direito).", "Escolhe <b>Instalar app</b> (ou <b>Adicionar ao ecrã principal</b>) e confirma.", "Abre a <b>Sabi Chat</b> no ecrã principal."];
+      return g;
+    }
+    // Computador
+    if (chromium) {
+      g.passos = ["Clica no ícone de instalar à direita da barra de endereço (ou menu <b>⋮</b> → <b>Instalar Sabi Chat</b> / <b>Aplicações</b> → <b>Instalar este site como app</b>).", "A app fica no menu Iniciar e na barra de tarefas (ou nas Aplicações, no Mac)."];
+      return g;
+    }
+    if (so === "mac" && br === "safari") {
+      g.passos = ["No Safari, abre o menu <b>Ficheiro</b> → <b>Adicionar à Dock</b> (macOS Sonoma ou mais recente).", "A Sabi Chat fica na Dock e nas Aplicações."];
+      return g;
+    }
+    const nome = br === "firefox" ? "Firefox" : "este browser";
+    if (so === "windows") {
+      g.links.push({ texto: "Instalar com o Microsoft Edge", href: "microsoft-edge:" + destino });
+      g.links.push({ texto: "Ou descarregar atalho para o ambiente de trabalho", href: "/atalho.url", download: true });
+      g.passos = [
+        `O ${nome} não instala apps web, por isso usamos o <b>Edge</b>, que já vem com o Windows. Carrega em <b>Instalar com o Microsoft Edge</b>${br === "firefox" ? " e, se o Firefox perguntar, escolhe <b>Abrir</b>" : ""}.`,
+        link ? "No Edge aparece este mesmo ecrã com o botão <b>Instalar app</b>." : "No Edge, abre o teu link pessoal e carrega em <b>Instalar app</b>.",
+        `Preferes continuar no ${nome}? Descarrega o atalho e arrasta-o para o ambiente de trabalho ou para a barra de tarefas.`,
+      ];
+      return g;
+    }
+    if (so === "mac") {
+      g.copiar = !!link;
+      g.links.push({ texto: "Descarregar atalho para a Dock", href: "/atalho.webloc", download: true });
+      g.passos = [
+        `O ${nome} não instala apps web no Mac. ${link ? "Carrega em <b>Copiar o meu link</b> e abre-o" : "Abre o teu link pessoal"} no <b>Safari</b> (Ficheiro → <b>Adicionar à Dock</b>) ou no <b>Chrome</b> (ícone de instalar na barra de endereço).`,
+        `Preferes continuar no ${nome}? Descarrega o atalho e arrasta-o para a Dock.`,
+      ];
+      return g;
+    }
+    g.copiar = !!link;
+    g.links.push({ texto: "Descarregar atalho", href: "/atalho.desktop", download: true });
+    g.passos = [
+      `Para uma app com janela própria, abre o teu link pessoal no <b>Chrome</b> ou no <b>Chromium</b> e usa o ícone de instalar.`,
+      `Para continuar no ${nome}, descarrega o atalho e põe-no no ambiente de trabalho.`,
+    ];
+    return g;
   }
 
   $("bv-instalar").addEventListener("click", async () => {
@@ -906,9 +974,16 @@
       prompt("Copia o teu link:", linkUsado);
     }
   });
+  $("bv-notif").addEventListener("click", async () => {
+    $("bv-notif").disabled = true;
+    try { await ligarNotificacoes(); } catch {}
+    desenharBoasVindas();
+  });
   $("bv-continuar").addEventListener("click", () => {
     $("boas-vindas").hidden = true;
     texto.focus();
+    // Notificações ativas por defeito: aproveita este toque para pedir a permissão.
+    if (temPush && Notification.permission === "default") ligarNotificacoes().catch(() => {});
   });
 
   function chaveBytes(b64) {
@@ -923,15 +998,19 @@
     return r.pushManager.getSubscription();
   }
 
-  async function ligarNotificacoes() {
-    const perm = await Notification.requestPermission();
-    if (perm !== "granted") return estadoApp();
+  async function subscrever() {
     const r = registo || (await navigator.serviceWorker.ready);
     const { chave } = await pedir("/api/push");
     let sub = await r.pushManager.getSubscription();
     if (!sub) sub = await r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveBytes(chave) });
     await pedir("/api/push", { method: "POST", body: JSON.stringify({ sub: sub.toJSON() }) });
-    estadoApp();
+    return sub;
+  }
+
+  async function ligarNotificacoes() {
+    const perm = await Notification.requestPermission();
+    if (perm === "granted") await subscrever();
+    await estadoApp();
   }
 
   async function desligarNotificacoes() {
@@ -945,12 +1024,10 @@
   async function estadoApp() {
     if (!eu) return;
     // Instalação
-    let ajuda = "";
-    if (instalada()) ajuda = "✓ Estás a usar o chat como app.";
-    else if (pedidoInstalar) ajuda = "Instala o chat como app: fica com o ícone da Sabi Stays e abre numa janela própria.";
-    else if (ehIOS) ajuda = "No iPhone: abre este link no <b>Safari</b>, toca em <b>Partilhar</b> (quadrado com seta) e depois em <b>Adicionar ao ecrã principal</b>. Ao abrir a app pela primeira vez, cola o teu link pessoal.";
-    else if (ehAndroid) ajuda = "No Android: no Chrome, toca no menu <b>⋮</b> e depois em <b>Instalar app</b> (ou <b>Adicionar ao ecrã principal</b>).";
-    else ajuda = "No PC: no Chrome ou no Edge, clica no ícone de instalar à direita da barra de endereço (ou menu <b>⋮</b> → <b>Instalar Sabi Chat</b>). Depois aparece no menu Iniciar e na barra de tarefas.";
+    const g = guia(null);
+    let ajuda = instalada() ? "✓ Estás a usar o chat como app." : g.instalar ? "Instala o chat como app: fica com o ícone da Sabi Stays e abre numa janela própria." : "";
+    if (g.passos.length) ajuda += `<ol class="guia-lista">${g.passos.map((p) => `<li>${p}</li>`).join("")}</ol>`;
+    if (g.links.length) ajuda += `<span class="guia-links">${g.links.map((l) => `<a href="${escapar(l.href)}"${l.download ? " download" : ""}>${l.texto}</a>`).join("")}</span>`;
     $("instalar-ajuda").innerHTML = ajuda;
     $("btn-instalar").hidden = !pedidoInstalar || instalada();
 
@@ -965,7 +1042,9 @@
       estado = "As notificações estão bloqueadas. Ativa-as nas definições do browser ou do telemóvel para este site.";
       b.hidden = true;
     } else {
-      const sub = await subscricaoAtual().catch(() => null);
+      let sub = await subscricaoAtual().catch(() => null);
+      // Permissão já dada mas sem subscrição (aparelho novo, app reinstalada): liga sozinho.
+      if (!sub && Notification.permission === "granted") sub = await subscrever().catch(() => null);
       if (sub && Notification.permission === "granted") {
         const r = await pedir("/api/push?endpoint=" + encodeURIComponent(sub.endpoint)).catch(() => ({}));
         ativo = !!r.ativo;
@@ -980,13 +1059,19 @@
       b.dataset.ativo = ativo ? "1" : "";
     }
     $("notif-estado").innerHTML = estado;
+    notifAtivo = ativo;
 
     // Aviso no topo do chat (até ser fechado)
     let fechado = false;
     try { fechado = localStorage.getItem("sabi-aviso-app") === "1"; } catch {}
     const falta = !instalada() || (temPush && !ativo && Notification.permission !== "denied");
     $("aviso-app").hidden = fechado || !falta;
-    $("aviso-app-texto").textContent = instalada() ? "Ativa as notificações para saberes quando chegam mensagens." : "Instala o chat como app no telemóvel e no PC.";
+    const pedirNotif = temPush && !ativo && Notification.permission === "default";
+    $("aviso-app-texto").textContent = pedirNotif ? "Ativa as notificações para saberes quando chegam mensagens." : "Instala o chat como app no telemóvel e no PC.";
+    $("btn-aviso-app").textContent = pedirNotif ? "Ativar" : "Como?";
+    // Na app instalada, o aviso das notificações não se pode esconder até estarem ativas.
+    if (pedirNotif && instalada()) $("aviso-app").hidden = false;
+    if (!$("boas-vindas").hidden) desenharBoasVindas();
   }
 
   $("btn-instalar").addEventListener("click", async () => {
@@ -1009,8 +1094,8 @@
     }
   });
   $("btn-aviso-app").addEventListener("click", async () => {
+    if (temPush && !notifAtivo && Notification.permission === "default") return ligarNotificacoes().catch(() => {});
     if (pedidoInstalar && !instalada()) return $("btn-instalar").click();
-    if (instalada() && temPush) return $("btn-notif").click();
     $("btn-membros").click();
     setTimeout(() => $("app-titulo").scrollIntoView({ block: "start" }), 50);
   });

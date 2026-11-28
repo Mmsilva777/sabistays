@@ -41,6 +41,7 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
   ".png": "image/png",
   ".woff2": "font/woff2",
   ".webmanifest": "application/manifest+json",
@@ -591,8 +592,29 @@ async function api(req, res, url) {
   return send(res, 404, { erro: "não encontrado" });
 }
 
+// Atalho para o ambiente de trabalho (para browsers que não instalam apps web, como o Firefox no PC).
+function servirAtalho(req, res, tipo) {
+  const base = (process.env.URL_PUBLICO || `${isHttps(req) ? "https" : "http"}://${req.headers.host}`).replace(/\/$/, "");
+  const ficheiros = {
+    url: ["Sabi Chat.url", "application/internet-shortcut", `[InternetShortcut]\r\nURL=${base}/\r\nIconFile=${base}/favicon.ico\r\nIconIndex=0\r\n`],
+    webloc: ["Sabi Chat.webloc", "application/x-apple-plist", `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>URL</key><string>${base}/</string></dict></plist>\n`],
+    desktop: ["sabi-chat.desktop", "application/x-desktop", `[Desktop Entry]\nType=Link\nName=Sabi Chat\nURL=${base}/\nIcon=web-browser\n`],
+  };
+  const f = ficheiros[tipo];
+  if (!f) return send(res, 404, { erro: "não encontrado" });
+  res.writeHead(200, {
+    ...SECURITY_HEADERS,
+    "Content-Type": f[1],
+    "Content-Disposition": `attachment; filename="${f[0]}"; filename*=UTF-8''${encodeURIComponent(f[0])}`,
+    "Cache-Control": "no-cache",
+  });
+  res.end(f[2]);
+}
+
 function serveStatic(req, res, url) {
   let p = url.pathname;
+  const atalho = p.match(/^\/atalho\.(url|webloc|desktop)$/);
+  if (atalho) return servirAtalho(req, res, atalho[1]);
   if (p === "/" || p === "/entrar") p = "/index.html";
   const file = path.normalize(path.join(PUBLIC_DIR, p));
   if (!file.startsWith(PUBLIC_DIR + path.sep)) return send(res, 404, "não encontrado");

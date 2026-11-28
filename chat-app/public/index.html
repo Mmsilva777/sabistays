@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#0B5F66">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/img/logo-simbolo_cor.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="stylesheet" href="/app.css">
 </head>
@@ -34,7 +35,9 @@
       <p>Instala o chat da Sabi Stays neste aparelho. Fica com o ícone no ecrã, abre numa janela própria e avisa-te quando chegam mensagens.</p>
       <ol id="bv-passos" class="bv-passos"></ol>
       <div class="bv-botoes">
+        <button type="button" id="bv-notif" hidden>🔔 Ativar notificações</button>
         <button type="button" id="bv-instalar" hidden>Instalar app</button>
+        <div id="bv-links" class="bv-botoes"></div>
         <button type="button" id="bv-copiar" hidden>Copiar o meu link</button>
         <button type="button" id="bv-continuar" class="secundario">Continuar no browser</button>
       </div>

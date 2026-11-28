@@ -79,6 +79,8 @@ O chat é uma app web instalável: fica com o ícone da Sabi Stays, abre numa ja
 - **Android:** abrir o link pessoal no Chrome, menu ⋮ → **Instalar app**.
 - **iPhone/iPad (iOS 16.4 ou mais recente):** abrir o link pessoal no **Safari**, Partilhar → **Adicionar ao ecrã principal**. Ao abrir a app pela primeira vez, colar o link pessoal no ecrã de entrada (no iPhone a app não partilha a sessão do Safari).
 - **Windows/Mac:** abrir o link no Chrome ou no Edge e clicar no ícone de instalar na barra de endereço. Fica no menu Iniciar e na barra de tarefas.
+- **Firefox e outros browsers:** o ecrã de boas-vindas deteta o browser. No Android (Firefox, Samsung Internet) mostra os passos do menu. No Windows, o Firefox não instala apps web, por isso há um botão que abre o link no Microsoft Edge (vem com o Windows) para instalar, ou um atalho para o ambiente de trabalho (`/atalho.url`). No Mac: Safari → Ficheiro → Adicionar à Dock, ou atalho `/atalho.webloc`. No Linux: atalho `/atalho.desktop`.
+- **Notificações:** o ecrã de boas-vindas tem o botão "Ativar notificações" e, se a pessoa não carregar, a permissão é pedida ao continuar. Na app instalada, o aviso para ativar fica visível até estarem ativas.
 
 Depois, no botão de membros → **App e notificações** → **Ativar notificações**. Cada pessoa recebe um aviso das mensagens novas quando não tem o chat aberto, e um aviso que fica no ecrã quando alguém escreve `@nome` ou `@todos`.
 
