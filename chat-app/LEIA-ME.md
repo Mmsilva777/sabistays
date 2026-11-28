@@ -8,12 +8,21 @@ Funciona no navegador do telemóvel ou do computador e pode instalar-se como app
 - **Sócios** (Marco, Lisa, Fernando): cada um recebe um link pessoal. Abre-o uma vez e fica com sessão iniciada nesse dispositivo. Não há palavras-passe.
 - **Convidados** (advogado, contabilista, fornecedor, proprietário): qualquer sócio cria um link no botão de membros, com prazo (7, 30, 90 dias ou sem prazo). O convidado só vê as mensagens a partir do momento em que entra. O acesso pode ser retirado a qualquer momento.
 - **Claude**: lê a conversa, mas só responde quando alguém escreve **@claude** (ou toca no botão @claude). Tem em conta as últimas 120 mensagens e as notas em "O que o Claude sabe", que os sócios editam no painel de membros. Pode pesquisar na web quando a pergunta o pede (leis, voos, preços).
-- As mensagens ficam guardadas no vosso servidor (`/var/lib/sabi-chat`). Para fazer cópia de segurança, basta copiar essa pasta.
+- **Ficheiros**: o clipe ao lado da caixa de texto envia fotos, vídeos, PDFs, zips e outros ficheiros (até 50 MB cada, 3 GB no total; ajustável no `/etc/sabi-chat.env`). Quando alguém chama o @claude, ele vê os últimos 4 anexos da conversa:
+  - fotos (versão reduzida gerada no telemóvel);
+  - vídeos através de 6 imagens tiradas ao longo do vídeo (o Claude não ouve o som);
+  - PDFs até 25 MB;
+  - ficheiros de texto e CSV;
+  - zips até 50 MB: lista o conteúdo e lê os textos, até 8 fotos e 3 PDFs lá de dentro.
+  Outros formatos (Word, Excel) ficam guardados e partilhados, mas o Claude ainda não os lê: exportem para PDF ou CSV.
+- **Arquivo por temas** (só sócios, ícone de caixa no topo): a cada 25 mensagens novas, ou 10 minutos depois de a conversa parar, o Claude arquiva sozinho as mensagens por tema (Legal, Finanças, Proprietários, Marketing, Operações, Fornecedores, Sócios e empresa, Site e ferramentas, Geral; podem criar mais). Para cada tema guarda um resumo atualizado e os dados importantes: decisões, números, contactos, tarefas e ideias. Há pesquisa, e cada tema pode ser descarregado em Markdown.
+- **Memória que evolui**: o arquivo também mantém uma "Memória do Claude" com os factos e decisões principais. Essa memória e os resumos entram em todas as respostas do Claude, por isso ele lembra-se do que foi decidido semanas antes, mesmo fora das últimas 120 mensagens. Se algo mudar na conversa (ex.: a comissão passa a 18%), a memória é corrigida no arquivo seguinte.
+- As mensagens, ficheiros e arquivo ficam guardados no vosso servidor (`/var/lib/sabi-chat`). Para fazer cópia de segurança, basta copiar essa pasta.
 
 ## Custos
 
 - Servidor: o VPS Hetzner que já têm (o chat é leve e cabe ao lado do site).
-- Claude: pago por uso na API da Anthropic. Cada resposta custa em média 5 a 10 cêntimos (mais se pesquisar na web). Com uso normal entre sócios, contem com 5 a 20 € por mês.
+- Claude: pago por uso na API da Anthropic. Cada resposta custa em média 5 a 10 cêntimos (mais se pesquisar na web ou analisar PDFs e fotos). O arquivo automático custa cerca de 1 a 3 cêntimos por cada lote de 25 mensagens. Com uso normal entre sócios, contem com 10 a 25 € por mês.
 - Há dois travões: o limite mensal do chat (`CLAUDE_LIMITE_MENSAL_USD`, 25 USD por omissão; o gasto aparece no painel de membros) e o limite de gasto que se define na própria consola da Anthropic.
 
 ## Instalar no servidor (uma vez, cerca de 20 minutos)
@@ -36,6 +45,16 @@ Funciona no navegador do telemóvel ou do computador e pode instalar-se como app
 
 Se o servidor já tiver um Caddyfile com o site, o script acrescenta só o bloco do chat (ver `deploy/Caddyfile.exemplo`).
 
+### Quando as portas 80/443 já são de um Caddy em Docker (caso do VPS da Sabi Stays)
+
+No VPS atual, o projeto guesttv (em `/opt/guesttv`, Docker Compose) já tem um Caddy em Docker com as portas da web. Nesse caso:
+
+1. Desligar o Caddy do sistema: `systemctl disable --now caddy`.
+2. Pôr o chat a ouvir no gateway da rede Docker do guesttv (`docker network inspect guesttv_internal` mostra o Gateway, ex. 172.18.0.1): em `/etc/sabi-chat.env`, `HOST=172.18.0.1`, e `systemctl restart sabi-chat`.
+3. Acrescentar ao `/opt/guesttv/Caddyfile` o bloco de `deploy/Caddyfile.exemplo`, com `reverse_proxy 172.18.0.1:8787`.
+4. Com o ufw ativo, deixar a rede Docker chegar ao chat: `ufw allow in on br-<id da rede> to 172.18.0.1 port 8787 proto tcp`.
+5. Recarregar: `docker exec -w /etc/caddy guesttv-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`.
+
 ## Gestão no dia a dia
 
 | Para quê | Comando no servidor |
@@ -43,7 +62,7 @@ Se o servidor já tiver um Caddyfile com o site, o script acrescenta só o bloco
 | Ver membros | `sabi-chat lista` |
 | Link novo para alguém que mudou de telemóvel | `sabi-chat novo-link <id>` |
 | Retirar ou devolver o acesso | `sabi-chat desativar <id>` / `sabi-chat ativar <id>` |
-| Atualizar o chat para a versão mais recente | `bash /opt/sabistays/chat-app/deploy/instalar.sh` |
+| Atualizar o chat para a versão mais recente | `cd /opt/sabistays && git pull && bash chat-app/deploy/atualizar.sh` |
 | Ver erros | `journalctl -u sabi-chat -n 50` |
 
 Os convidados também se gerem diretamente no chat (botão de membros, no canto superior direito).
@@ -63,6 +82,8 @@ Abrir o link mostrado (http://localhost:8787/entrar#...).
 - `server.mjs`: servidor (Node, sem frameworks). Mensagens em tempo real por Server-Sent Events.
 - `lib/claude.mjs`: ligação ao Claude (modelo `claude-opus-5-5`, contexto do negócio em cache, pesquisa web, limite de gasto).
 - `lib/store.mjs`: membros e mensagens em ficheiros na pasta de dados.
+- `lib/arquivo.mjs`: arquivo automático por temas e memória do Claude.
+- `lib/ficheiros.mjs`: envio de ficheiros, pré-visualizações e preparação dos anexos (fotos, vídeos, PDFs, zips) para o Claude.
 - `admin.mjs`: comandos de gestão de membros.
 - `contexto-exemplo.md`: notas iniciais do Claude; no servidor passam para `data/contexto.md` e editam-se no chat.
 - `public/`: a app (HTML, CSS, JS).

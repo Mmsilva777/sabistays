@@ -5,7 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./lib/store.mjs";
-import { ClaudeBot } from "./lib/claude.mjs";
+import Anthropic from "@anthropic-ai/sdk";
+import { ClaudeBot, MODEL, estimateCost } from "./lib/claude.mjs";
+import { Arquivo, arquivarLote } from "./lib/arquivo.mjs";
+import { Ficheiros, MAX_MB, TOTAL_MB } from "./lib/ficheiros.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8787);
@@ -21,7 +24,12 @@ const store = new Store(DATA_DIR);
 if (!fs.existsSync(CONTEXT_FILE)) {
   fs.copyFileSync(path.join(here, "contexto-exemplo.md"), CONTEXT_FILE);
 }
-const claude = new ClaudeBot({ store, contextFile: CONTEXT_FILE });
+const arquivo = new Arquivo(DATA_DIR);
+const ficheiros = new Ficheiros(DATA_DIR);
+const claude = new ClaudeBot({ store, contextFile: CONTEXT_FILE, arquivo, ficheiros });
+// Arquivo automático: corre quando há ARQUIVO_LOTE mensagens novas ou ao fim de ARQUIVO_PAUSA_MIN minutos sem conversa.
+const ARQUIVO_LOTE = Number(process.env.ARQUIVO_LOTE || 25);
+const ARQUIVO_PAUSA_MIN = Number(process.env.ARQUIVO_PAUSA_MIN || 10);
 
 // ---------- utilitários HTTP ----------
 
@@ -36,11 +44,17 @@ const MIME = {
   ".json": "application/json",
 };
 
+const MEDIA_MIME = {
+  ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp",
+  ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
+  ".pdf": "application/pdf", ".txt": "text/plain; charset=utf-8",
+};
+
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "DENY",
-  "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
 };
 
 function send(res, status, body, headers = {}) {
@@ -195,6 +209,7 @@ function handleClaude(trigger, asker) {
       store.addUsage(costUsd);
       const msg = store.addMessage({ authorId: "claude", authorName: "Claude", kind: "claude", text, replyTo: trigger.id });
       broadcastMessage(msg);
+      agendarArquivo();
     } catch (err) {
       console.error("Erro do Claude:", err?.status, err?.message);
       const msg = store.addMessage({
@@ -208,6 +223,95 @@ function handleClaude(trigger, asker) {
       broadcast("claude", { escrevendo: false });
     }
   });
+}
+
+// ---------- arquivo automático por temas ----------
+
+let arquivando = false;
+let arquivoTimer = null;
+const arquivoClient = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+
+async function correrArquivo(motivo) {
+  if (!arquivoClient || arquivando) return;
+  if (store.monthUsage() >= MONTHLY_LIMIT_USD) return;
+  arquivando = true;
+  try {
+    // Em lotes de 80 mensagens, até não haver pendentes.
+    for (let volta = 0; volta < 20; volta++) {
+      const pendentes = arquivo.pendentes(store.messages);
+      if (!pendentes.length) break;
+      const lote = pendentes.slice(0, 80);
+      const idx = store.messages.findIndex((m) => m.id === lote[0].id);
+      const anterior = store.messages.slice(Math.max(0, idx - 10), idx).filter((m) => m.kind !== "sistema");
+      const { resultado, usage } = await arquivarLote({ client: arquivoClient, model: MODEL, arquivo, lote, contextoAnterior: anterior });
+      store.addUsage(estimateCost(usage));
+      arquivo.aplicar(resultado, lote);
+      const temas = Object.fromEntries(lote.map((m) => [m.id, arquivo.temasDe(m.id)]));
+      broadcast("arquivo", { temas }, (m) => m.role === "socio");
+    }
+    console.log(`Arquivo atualizado (${motivo}).`);
+  } catch (err) {
+    console.error("Erro no arquivo:", err?.status, err?.message);
+  } finally {
+    arquivando = false;
+  }
+}
+
+function agendarArquivo() {
+  if (!arquivoClient) return;
+  clearTimeout(arquivoTimer);
+  if (arquivo.pendentes(store.messages).length >= ARQUIVO_LOTE) {
+    correrArquivo("lote cheio");
+    return;
+  }
+  arquivoTimer = setTimeout(() => correrArquivo("pausa na conversa"), ARQUIVO_PAUSA_MIN * 60_000);
+  arquivoTimer.unref?.();
+}
+
+// Ao arrancar, arquivar o que tenha ficado pendente.
+setTimeout(() => {
+  if (arquivo.pendentes(store.messages).length) correrArquivo("arranque");
+}, 15_000).unref();
+
+// ---------- ficheiros: servir com suporte a Range (para vídeos) ----------
+
+function podeVerFicheiro(me, f) {
+  if (!f) return false;
+  if (!f.mensagemId) return f.autorId === me.id; // ainda não publicado: só quem enviou
+  const msg = store.messages.find((m) => m.id === f.mensagemId);
+  if (!msg) return false;
+  return !me.seesFrom || msg.at >= me.seesFrom;
+}
+
+function servirFicheiro(req, res, file, tipo, nome, inline) {
+  let stat;
+  try {
+    stat = fs.statSync(file);
+  } catch {
+    return send(res, 404, { erro: "ficheiro não encontrado" });
+  }
+  const headers = {
+    ...SECURITY_HEADERS,
+    "Content-Type": tipo,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, max-age=3600",
+    "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(nome)}`,
+  };
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
+  if (range && (range[1] || range[2])) {
+    let start = range[1] ? Number(range[1]) : stat.size - Number(range[2]);
+    let end = range[1] && range[2] ? Number(range[2]) : stat.size - 1;
+    if (start < 0) start = 0;
+    if (start >= stat.size || end < start) {
+      res.writeHead(416, { ...headers, "Content-Range": `bytes */${stat.size}` });
+      return res.end();
+    }
+    end = Math.min(end, stat.size - 1);
+    res.writeHead(206, { ...headers, "Content-Range": `bytes ${start}-${end}/${stat.size}`, "Content-Length": end - start + 1 });
+    return fs.createReadStream(file, { start, end }).pipe(res);
+  }
+  res.writeHead(200, { ...headers, "Content-Length": stat.size });
+  fs.createReadStream(file).pipe(res);
 }
 
 // ---------- rotas ----------
@@ -236,23 +340,33 @@ async function api(req, res, url) {
   if (!me) return send(res, 401, { erro: "sessão em falta" });
 
   if (p === "/api/eu" && method === "GET") {
-    return send(res, 200, { membro: publicMember(me), claude: claude.enabled });
+    return send(res, 200, { membro: publicMember(me), claude: claude.enabled, maxMb: MAX_MB });
   }
 
   if (p === "/api/mensagens" && method === "GET") {
     const before = url.searchParams.get("antes");
-    return send(res, 200, { mensagens: store.visibleTo(me, { before, limit: 150 }) });
+    let mensagens = store.visibleTo(me, { before, limit: 150 });
+    if (me.role === "socio") mensagens = mensagens.map((m) => ({ ...m, temas: arquivo.temasDe(m.id) }));
+    return send(res, 200, { mensagens });
   }
 
   if (p === "/api/mensagens" && method === "POST") {
     if (rateLimited(`msg:${me.id}`, 40, 60_000)) return send(res, 429, { erro: "estás a enviar mensagens demasiado depressa" });
-    const { texto } = await readJson(req);
+    const { texto, anexo: anexoId } = await readJson(req);
     const text = String(texto || "").trim();
-    if (!text) return send(res, 400, { erro: "mensagem vazia" });
+    let anexo = null;
+    if (anexoId) {
+      const f = ficheiros.get(String(anexoId));
+      if (!f || f.autorId !== me.id || f.mensagemId) return send(res, 400, { erro: "anexo inválido" });
+      anexo = ficheiros.publico(f);
+    }
+    if (!text && !anexo) return send(res, 400, { erro: "mensagem vazia" });
     if (text.length > 8000) return send(res, 400, { erro: "mensagem demasiado longa" });
-    const msg = store.addMessage({ authorId: me.id, authorName: me.name, text });
+    const msg = store.addMessage({ authorId: me.id, authorName: me.name, text, anexo });
+    if (anexo) ficheiros.ligarMensagem(anexo.id, msg.id);
     broadcastMessage(msg);
     if (ClaudeBot.isMention(text)) handleClaude(msg, me);
+    agendarArquivo();
     return send(res, 201, { mensagem: msg });
   }
 
@@ -273,6 +387,33 @@ async function api(req, res, url) {
       broadcastPresence();
     });
     return;
+  }
+
+  // ----- ficheiros -----
+  if (p === "/api/ficheiros" && method === "POST") {
+    if (rateLimited(`up:${me.id}`, 30, 10 * 60_000)) return send(res, 429, { erro: "demasiados envios; espera um pouco" });
+    const nome = decodeURIComponent(String(req.headers["x-nome"] || "ficheiro"));
+    const f = await ficheiros.receber(req, { nome, tipo: req.headers["content-type"], autorId: me.id });
+    return send(res, 201, { ficheiro: ficheiros.publico(f) });
+  }
+  let fm = p.match(/^\/api\/ficheiros\/([a-f0-9]{16})\/previa$/);
+  if (fm && method === "POST") {
+    const f = await ficheiros.receberPrevia(req, fm[1], me.id);
+    return send(res, 201, { ficheiro: ficheiros.publico(f) });
+  }
+  fm = p.match(/^\/api\/ficheiros\/([a-f0-9]{16})(?:\/previa\/(\d))?$/);
+  if (fm && (method === "GET" || method === "HEAD")) {
+    const f = ficheiros.get(fm[1]);
+    if (!podeVerFicheiro(me, f)) return send(res, 404, { erro: "ficheiro não encontrado" });
+    if (fm[2] !== undefined) {
+      const n = Number(fm[2]);
+      if (!f.previas.some((x) => x.n === n)) return send(res, 404, { erro: "sem pré-visualização" });
+      return servirFicheiro(req, res, ficheiros.caminhoPrevia(f.id, n), "image/jpeg", `previa-${n}.jpg`, true);
+    }
+    const ext = path.extname(f.nome).toLowerCase();
+    const seguro = MEDIA_MIME[ext];
+    const download = url.searchParams.has("descarregar") || !seguro;
+    return servirFicheiro(req, res, ficheiros.caminho(f.id), seguro || "application/octet-stream", f.nome, !download);
   }
 
   if (p === "/api/membros" && method === "GET") {
@@ -335,6 +476,46 @@ async function api(req, res, url) {
     const sys = store.addMessage({ authorId: null, authorName: "Sistema", kind: "sistema", text: `${me.name} atualizou o que o Claude sabe sobre a Sabi Stays.` });
     broadcastMessage(sys);
     return send(res, 200, { ok: true });
+  }
+
+  // ----- arquivo por temas (só sócios) -----
+  if (p === "/api/arquivo" && method === "GET") {
+    return send(res, 200, arquivo.resumoTemas(store.messages));
+  }
+  if (p === "/api/arquivo/agora" && method === "POST") {
+    if (!arquivoClient) return send(res, 400, { erro: "falta a chave da API" });
+    if (arquivando) return send(res, 409, { erro: "o arquivo já está a ser atualizado" });
+    correrArquivo("pedido de " + me.name);
+    return send(res, 202, { ok: true });
+  }
+  if (p === "/api/arquivo/temas" && method === "POST") {
+    const { nome } = await readJson(req);
+    try {
+      return send(res, 201, { tema: arquivo.addTema(nome) });
+    } catch (e) {
+      return send(res, 400, { erro: e.message });
+    }
+  }
+  if (p === "/api/arquivo/pesquisa" && method === "GET") {
+    return send(res, 200, arquivo.pesquisar(url.searchParams.get("q"), store.messages));
+  }
+  const am = p.match(/^\/api\/arquivo\/temas\/([a-z0-9-]{1,40})(\.md)?$/);
+  if (am && method === "GET") {
+    if (am[2]) {
+      const md = arquivo.markdown(am[1], store.messages);
+      if (!md) return send(res, 404, { erro: "tema não encontrado" });
+      return send(res, 200, md, {
+        "Content-Type": "text/markdown; charset=utf-8",
+        "Content-Disposition": `attachment; filename="sabi-arquivo-${am[1]}.md"`,
+      });
+    }
+    const t = arquivo.tema(am[1], store.messages);
+    if (!t) return send(res, 404, { erro: "tema não encontrado" });
+    return send(res, 200, { tema: t });
+  }
+
+  if (p === "/api/ficheiros-uso" && method === "GET") {
+    return send(res, 200, { usadoMb: Math.round(ficheiros.usadoBytes() / 1048576), totalMb: TOTAL_MB, maxMb: MAX_MB });
   }
 
   if (p === "/api/claude/uso" && method === "GET") {
