@@ -45,15 +45,17 @@ systemctl daemon-reload
 systemctl enable --now sabi-chat
 systemctl restart sabi-chat
 
-if ! grep -q "chat.sabistays-sal.com" /etc/caddy/Caddyfile 2>/dev/null; then
-  printf '\n' >> /etc/caddy/Caddyfile
-  cat deploy/Caddyfile.exemplo >> /etc/caddy/Caddyfile
-fi
-# Garantir que o Caddy arranca sempre com o servidor e carrega a configuração nova.
-systemctl enable caddy >/dev/null 2>&1 || true
-if ! systemctl reload-or-restart caddy; then
-  echo "!! O Caddy não arrancou. Veja o motivo com: journalctl -u caddy -n 30 --no-pager"
-  echo "   (muitas vezes outro programa já está a usar as portas 80/443: ss -tlnp | grep -E ':80 |:443 ')"
+# Se as portas da web já forem de outro programa (ex.: um Caddy em Docker), não usar o Caddy do sistema.
+if ss -tlnp 2>/dev/null | grep -E ':(80|443) ' | grep -vq caddy; then
+  systemctl disable --now caddy >/dev/null 2>&1 || true
+  echo ">> As portas 80/443 já estão ocupadas por outro programa. Ponha o chat atrás desse proxy (ver LEIA-ME, secção Docker)."
+else
+  if ! grep -q "chat.sabistays-sal.com" /etc/caddy/Caddyfile 2>/dev/null; then
+    printf '\n' >> /etc/caddy/Caddyfile
+    cat deploy/Caddyfile.exemplo >> /etc/caddy/Caddyfile
+  fi
+  systemctl enable caddy >/dev/null 2>&1 || true
+  systemctl reload-or-restart caddy || echo "!! O Caddy não arrancou. Veja: journalctl -u caddy -n 30 --no-pager"
 fi
 
 echo

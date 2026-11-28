@@ -4,6 +4,8 @@
   const lista = $("lista");
   const texto = $("texto");
   let eu = null;
+  let maxMb = 50;
+  let nomesTemas = {}; // id -> nome (só sócios)
   let membros = [];
   let online = new Set();
   let mensagens = [];
@@ -40,6 +42,7 @@
     try {
       const r = await pedir("/api/eu");
       eu = r.membro;
+      maxMb = r.maxMb || maxMb;
     } catch {
       mostrarPorta();
       return;
@@ -47,6 +50,8 @@
     $("porta").hidden = true;
     $("app").hidden = false;
     await carregarMembros();
+    $("btn-arquivo").hidden = eu.role !== "socio";
+    if (eu.role === "socio") await carregarNomesTemas();
     const r = await pedir("/api/mensagens");
     mensagens = r.mensagens;
     $("mais").hidden = mensagens.length < 150;
@@ -146,7 +151,11 @@
       const cor = m.kind === "claude" ? "var(--coral)" : corDe(m.authorId);
       html += `<span class="autor" style="color:${cor}">${escapar(m.authorName)}${papel ? `<small>${papel}</small>` : ""}</span>`;
     }
-    html += `<div class="corpo">${m.kind === "claude" ? markdown(m.text) : inline(m.text)}</div>`;
+    if (m.anexo) html += htmlAnexo(m.anexo);
+    if (m.text) html += `<div class="corpo">${m.kind === "claude" ? markdown(m.text) : inline(m.text)}</div>`;
+    if (m.temas && m.temas.length && eu.role === "socio") {
+      html += `<span class="temas">${m.temas.map((t) => `<span class="tema">${escapar(nomesTemas[t] || t)}</span>`).join("")}</span>`;
+    }
     html += `<span class="hora">${fmtHora.format(new Date(m.at))}</span>`;
     d.innerHTML = html;
     return d;
@@ -210,6 +219,14 @@
       atualizarEstado();
       if (!$("painel").hidden) desenharMembros();
     });
+    eventos.addEventListener("arquivo", async (e) => {
+      const { temas } = JSON.parse(e.data);
+      const novos = Object.values(temas).flat().some((t) => !nomesTemas[t]);
+      if (novos) await carregarNomesTemas();
+      for (const m of mensagens) if (temas[m.id]) m.temas = temas[m.id];
+      desenharTudo(true);
+      if (!$("arquivo").hidden && !temaAberto) abrirArquivo();
+    });
     eventos.addEventListener("claude", (e) => {
       $("escrevendo").hidden = !JSON.parse(e.data).escrevendo;
     });
@@ -262,10 +279,13 @@
   $("compor").addEventListener("submit", async (e) => {
     e.preventDefault();
     const t = texto.value.trim();
-    if (!t) return;
+    if (!t && !ficheiroEscolhido) return;
     $("btn-enviar").disabled = true;
     try {
-      const r = await pedir("/api/mensagens", { method: "POST", body: JSON.stringify({ texto: t }) });
+      let anexo = null;
+      if (ficheiroEscolhido) anexo = await enviarFicheiro(ficheiroEscolhido);
+      const r = await pedir("/api/mensagens", { method: "POST", body: JSON.stringify({ texto: t, anexo }) });
+      limparFicheiro();
       texto.value = "";
       ajustarAltura();
       juntarMensagem(r.mensagem);
@@ -382,7 +402,7 @@
     if (e.target === $("painel")) $("painel").hidden = true;
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") $("painel").hidden = true;
+    if (e.key === "Escape") { $("painel").hidden = true; $("arquivo").hidden = true; }
   });
 
   $("convidar").addEventListener("submit", async (e) => {
@@ -429,6 +449,239 @@
     await pedir("/api/sair", { method: "POST", body: "{}" });
     if (eventos) eventos.close();
     mostrarPorta("Saíste. Para voltar a entrar, abre o teu link pessoal.");
+  });
+
+
+  // ---------- anexos ----------
+
+  let ficheiroEscolhido = null;
+
+  function tamanhoLegivel(b) {
+    if (b < 1024 * 1024) return Math.max(1, Math.round(b / 1024)) + " KB";
+    return (b / 1024 / 1024).toFixed(1) + " MB";
+  }
+
+  const ICONES = { pdf: "📄", zip: "🗜️", texto: "📝", video: "🎬", imagem: "🖼️", outro: "📎" };
+
+  function htmlAnexo(a) {
+    const url = `/api/ficheiros/${a.id}`;
+    if (a.categoria === "imagem") {
+      const src = a.previas ? `${url}/previa/0` : url;
+      return `<a class="anexo-img" href="${url}" target="_blank" rel="noopener"><img src="${src}" alt="${escapar(a.nome)}" loading="lazy"></a>`;
+    }
+    if (a.categoria === "video") {
+      const poster = a.previas ? ` poster="${url}/previa/0"` : "";
+      return `<video class="anexo-video" controls preload="none" playsinline src="${url}"${poster}></video>`;
+    }
+    return `<a class="anexo-ficheiro" href="${url}?descarregar" rel="noopener"><span class="ic">${ICONES[a.categoria] || "📎"}</span><span><b>${escapar(a.nome)}</b><small>${tamanhoLegivel(a.tamanho)} · descarregar</small></span></a>`;
+  }
+
+  $("btn-anexo").addEventListener("click", () => $("ficheiro").click());
+  $("ficheiro").addEventListener("change", () => {
+    const f = $("ficheiro").files[0];
+    if (!f) return;
+    if (f.size > maxMb * 1024 * 1024) {
+      alertaSistema(`"${f.name}" tem ${tamanhoLegivel(f.size)}. O máximo por ficheiro é ${maxMb} MB.`);
+      $("ficheiro").value = "";
+      return;
+    }
+    ficheiroEscolhido = f;
+    $("anexo-nome").textContent = `${f.name} (${tamanhoLegivel(f.size)})`;
+    $("anexo-barra").style.width = "0%";
+    $("anexo-escolhido").hidden = false;
+    texto.focus();
+  });
+  $("btn-tirar-anexo").addEventListener("click", limparFicheiro);
+
+  function limparFicheiro() {
+    ficheiroEscolhido = null;
+    $("ficheiro").value = "";
+    $("anexo-escolhido").hidden = true;
+  }
+
+  function enviarComProgresso(url, corpo, headers, aoProgresso) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+      xhr.upload.onprogress = (e) => e.lengthComputable && aoProgresso && aoProgresso(e.loaded / e.total);
+      xhr.onload = () => {
+        let d = {};
+        try { d = JSON.parse(xhr.responseText); } catch {}
+        if (xhr.status >= 200 && xhr.status < 300) resolve(d);
+        else reject(new Error(d.erro || `erro ${xhr.status}`));
+      };
+      xhr.onerror = () => reject(new Error("falhou a ligação durante o envio"));
+      xhr.send(corpo);
+    });
+  }
+
+  async function enviarFicheiro(f) {
+    const r = await enviarComProgresso("/api/ficheiros", f, {
+      "Content-Type": f.type || "application/octet-stream",
+      "X-Nome": encodeURIComponent(f.name),
+    }, (p) => ($("anexo-barra").style.width = Math.round(p * 90) + "%"));
+    const id = r.ficheiro.id;
+    // Pré-visualizações leves (para mostrar no chat e para o Claude ver).
+    try {
+      const previas = r.ficheiro.categoria === "imagem" ? [await reduzirImagem(f)] : r.ficheiro.categoria === "video" ? await framesVideo(f, 6) : [];
+      for (const b of previas.filter(Boolean)) {
+        await enviarComProgresso(`/api/ficheiros/${id}/previa`, b, { "Content-Type": "image/jpeg" });
+      }
+    } catch {
+      // sem pré-visualização: o ficheiro segue na mesma
+    }
+    $("anexo-barra").style.width = "100%";
+    return id;
+  }
+
+  function canvasParaJpeg(fonte, w, h, max) {
+    const escala = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement("canvas");
+    c.width = Math.round(w * escala);
+    c.height = Math.round(h * escala);
+    c.getContext("2d").drawImage(fonte, 0, 0, c.width, c.height);
+    return new Promise((res) => c.toBlob(res, "image/jpeg", 0.82));
+  }
+
+  function reduzirImagem(f) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(f);
+      const img = new Image();
+      img.onload = async () => {
+        const b = await canvasParaJpeg(img, img.naturalWidth, img.naturalHeight, 1600);
+        URL.revokeObjectURL(url);
+        resolve(b);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
+  function framesVideo(f, n) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(f);
+      const v = document.createElement("video");
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = "auto";
+      const frames = [];
+      let tempos = [];
+      const acabar = () => { URL.revokeObjectURL(url); resolve(frames); };
+      const seguinte = () => {
+        if (!tempos.length) return acabar();
+        v.currentTime = tempos.shift();
+      };
+      v.onloadedmetadata = () => {
+        const d = v.duration && isFinite(v.duration) ? v.duration : 1;
+        tempos = Array.from({ length: n }, (_, i) => Math.min(d - 0.05, (d * (i + 0.5)) / n));
+        seguinte();
+      };
+      v.onseeked = async () => {
+        try { frames.push(await canvasParaJpeg(v, v.videoWidth, v.videoHeight, 1280)); } catch {}
+        seguinte();
+      };
+      v.onerror = acabar;
+      setTimeout(acabar, 20000);
+      v.src = url;
+    });
+  }
+
+  // ---------- arquivo por temas ----------
+
+  let temaAberto = null;
+
+  async function carregarNomesTemas() {
+    try {
+      const r = await pedir("/api/arquivo");
+      nomesTemas = Object.fromEntries(r.temas.map((t) => [t.id, t.nome]));
+      return r;
+    } catch {
+      return null;
+    }
+  }
+
+  const ROTULOS = { decisao: "Decisões", numero: "Números", contacto: "Contactos", tarefa: "Tarefas", ideia: "Ideias", nota: "Notas" };
+  const fmtData = new Intl.DateTimeFormat("pt-PT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+  async function abrirArquivo() {
+    temaAberto = null;
+    const r = await carregarNomesTemas();
+    if (!r) return;
+    const cx = $("arquivo-conteudo");
+    let html = "";
+    html += `<p class="ajuda">${r.ultimaExecucao ? "Última atualização: " + fmtData.format(new Date(r.ultimaExecucao)) : "Ainda não foi arquivado nada."}${r.pendentes ? ` · ${r.pendentes} mensagens por arquivar` : ""}</p>`;
+    if (r.factos.length) {
+      html += `<details class="memoria" open><summary>Memória do Claude (${r.factos.length})</summary><ul>${r.factos.map((f) => `<li>${inline(f)}</li>`).join("")}</ul></details>`;
+    }
+    html += `<div class="temas-grelha">`;
+    for (const t of r.temas) {
+      html += `<button type="button" class="tema-cartao" data-tema="${t.id}"><b>${escapar(t.nome)}</b><small>${t.mensagens} mensagens · ${t.itens} dados</small>${t.resumo ? `<span>${escapar(t.resumo.replace(/[*#`_]/g, "").slice(0, 140))}${t.resumo.length > 140 ? "…" : ""}</span>` : ""}</button>`;
+    }
+    html += `</div>`;
+    html += `<form id="novo-tema" class="convidar"><input id="novo-tema-nome" placeholder="Novo tema (ex.: Boa Vista)" maxlength="60" required><button type="submit">Criar tema</button></form>`;
+    cx.innerHTML = html;
+    cx.querySelectorAll(".tema-cartao").forEach((b) => (b.onclick = () => abrirTema(b.dataset.tema)));
+    $("novo-tema").onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        await pedir("/api/arquivo/temas", { method: "POST", body: JSON.stringify({ nome: $("novo-tema-nome").value }) });
+        abrirArquivo();
+      } catch (err) { alert(err.message); }
+    };
+    $("arquivo-titulo").textContent = "Arquivo";
+    $("btn-arquivo-voltar").hidden = true;
+  }
+
+  function htmlMensagemArquivo(m) {
+    const anexo = m.anexo ? ` <a href="/api/ficheiros/${m.anexo.id}?descarregar">📎 ${escapar(m.anexo.nome)}</a>` : "";
+    return `<li><small>${escapar(m.kind === "claude" ? "Claude" : m.authorName)} · ${fmtData.format(new Date(m.at))}</small><div>${m.kind === "claude" ? markdown(m.text) : inline(m.text)}${anexo}</div></li>`;
+  }
+
+  async function abrirTema(id) {
+    temaAberto = id;
+    const { tema: t } = await pedir("/api/arquivo/temas/" + id);
+    let html = `<p><a class="descarregar" href="/api/arquivo/temas/${t.id}.md">Descarregar este tema (.md)</a></p>`;
+    html += `<h3>Resumo</h3><div class="resumo">${t.resumo ? markdown(t.resumo) : "<p class='ajuda'>Ainda sem resumo.</p>"}</div>`;
+    for (const tipo of Object.keys(ROTULOS)) {
+      const lista = t.itens.filter((i) => i.tipo === tipo);
+      if (!lista.length) continue;
+      html += `<h3>${ROTULOS[tipo]}</h3><ul class="itens">${lista.map((i) => `<li>${inline(i.texto)} <small>${escapar(i.autor || "")} · ${new Date(i.at).toLocaleDateString("pt-PT")}</small></li>`).join("")}</ul>`;
+    }
+    html += `<h3>Conversa (${t.mensagens.length})</h3><ul class="conversa">${t.mensagens.slice().reverse().map(htmlMensagemArquivo).join("")}</ul>`;
+    $("arquivo-conteudo").innerHTML = html;
+    $("arquivo-titulo").textContent = t.nome;
+    $("btn-arquivo-voltar").hidden = false;
+    $("arquivo-conteudo").scrollTop = 0;
+  }
+
+  $("btn-arquivo").addEventListener("click", () => {
+    $("arquivo").hidden = false;
+    abrirArquivo();
+  });
+  $("btn-arquivo-fechar").addEventListener("click", () => ($("arquivo").hidden = true));
+  $("btn-arquivo-voltar").addEventListener("click", abrirArquivo);
+  $("btn-arquivar-agora").addEventListener("click", async () => {
+    try {
+      await pedir("/api/arquivo/agora", { method: "POST", body: "{}" });
+      $("btn-arquivar-agora").textContent = "A arquivar…";
+      setTimeout(() => ($("btn-arquivar-agora").textContent = "Arquivar agora"), 8000);
+    } catch (err) { alert(err.message); }
+  });
+  let pesquisaTimer = null;
+  $("arquivo-pesquisa").addEventListener("input", () => {
+    clearTimeout(pesquisaTimer);
+    pesquisaTimer = setTimeout(async () => {
+      const q = $("arquivo-pesquisa").value.trim();
+      if (q.length < 2) return abrirArquivo();
+      temaAberto = "pesquisa";
+      const r = await pedir("/api/arquivo/pesquisa?q=" + encodeURIComponent(q));
+      let html = `<h3>Dados (${r.itens.length})</h3><ul class="itens">${r.itens.map((i) => `<li>${inline(i.texto)} <small>${escapar(nomesTemas[i.tema] || i.tema)}</small></li>`).join("")}</ul>`;
+      html += `<h3>Mensagens (${r.mensagens.length})</h3><ul class="conversa">${r.mensagens.slice().reverse().map(htmlMensagemArquivo).join("")}</ul>`;
+      $("arquivo-conteudo").innerHTML = html;
+      $("arquivo-titulo").textContent = `Pesquisa: ${q}`;
+      $("btn-arquivo-voltar").hidden = false;
+    }, 300);
   });
 
   if ("serviceWorker" in navigator) {

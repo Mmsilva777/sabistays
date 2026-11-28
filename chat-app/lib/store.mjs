@@ -139,7 +139,7 @@ export class Store {
 
   // ---------- mensagens ----------
 
-  addMessage({ authorId, authorName, kind = "humano", text, replyTo = null }) {
+  addMessage({ authorId, authorName, kind = "humano", text, replyTo = null, anexo = null }) {
     const msg = {
       id: newId(),
       at: new Date().toISOString(),
@@ -149,6 +149,7 @@ export class Store {
       text: String(text).slice(0, 8000),
       replyTo,
     };
+    if (anexo) msg.anexo = anexo; // { id, nome, tipo, categoria, tamanho, previas }
     this.messages.push(msg);
     fs.appendFileSync(this.messagesFile, JSON.stringify(msg) + "\n", { mode: 0o600 });
     return msg;

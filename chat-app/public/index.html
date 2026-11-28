@@ -29,6 +29,9 @@
         <strong>Sabi Stays · Sócios</strong>
         <span id="estado">a ligar…</span>
       </div>
+      <button id="btn-arquivo" class="icone" type="button" aria-label="Arquivo por temas" title="Arquivo por temas" hidden>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3 4h18v4H3V4Zm1 5h16v11H4V9Zm5 3v2h6v-2H9Z"/></svg>
+      </button>
       <button id="btn-membros" class="icone" type="button" aria-label="Membros e convites" title="Membros e convites">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13Zm8 0c-.3 0-.6 0-1 .1a4.7 4.7 0 0 1 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5Z"/></svg>
       </button>
@@ -42,13 +45,37 @@
       <span class="pontos"><i></i><i></i><i></i></span> O Claude está a escrever…
     </div>
 
+    <div id="anexo-escolhido" class="anexo-escolhido" hidden>
+      <span id="anexo-nome"></span>
+      <button type="button" id="btn-tirar-anexo" aria-label="Tirar anexo">✕</button>
+      <span class="barra"><i id="anexo-barra"></i></span>
+    </div>
+
     <form id="compor" class="compor" autocomplete="off">
+      <input id="ficheiro" type="file" hidden>
+      <button type="button" id="btn-anexo" class="clip" aria-label="Anexar ficheiro, foto, vídeo ou zip" title="Anexar ficheiro, foto, vídeo ou zip">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v10.5a1.5 1.5 0 0 1-3 0V6.5H9v9a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10h-1.5Z"/></svg>
+      </button>
       <button type="button" id="btn-claude" class="chip" title="Chamar o Claude">@claude</button>
       <textarea id="texto" rows="1" placeholder="Mensagem" aria-label="Mensagem" maxlength="8000"></textarea>
       <button type="submit" id="btn-enviar" class="enviar" aria-label="Enviar">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>
       </button>
     </form>
+  </section>
+
+  <!-- Arquivo por temas -->
+  <section id="arquivo" class="arquivo" hidden aria-label="Arquivo">
+    <header class="topo">
+      <button id="btn-arquivo-voltar" class="icone" type="button" aria-label="Voltar aos temas" hidden>←</button>
+      <div class="topo-titulo"><strong id="arquivo-titulo">Arquivo</strong><span>Organizado automaticamente pelo Claude</span></div>
+      <button id="btn-arquivo-fechar" class="icone" type="button" aria-label="Fechar arquivo">✕</button>
+    </header>
+    <div class="arquivo-barra">
+      <input id="arquivo-pesquisa" type="search" placeholder="Pesquisar no arquivo">
+      <button id="btn-arquivar-agora" type="button">Arquivar agora</button>
+    </div>
+    <div id="arquivo-conteudo" class="arquivo-conteudo"></div>
   </section>
 
   <!-- Painel de membros -->
@@ -90,6 +117,7 @@
 
       <h3>Como usar o Claude</h3>
       <p class="ajuda">Escreve <b>@claude</b> numa mensagem e ele responde, tendo em conta a conversa recente e o contexto da Sabi Stays. Sem @claude, ele não intervém.</p>
+      <p class="ajuda">Podes enviar fotos, vídeos, PDFs e zips com o clipe (até 50 MB). O Claude vê os últimos anexos quando é chamado. Os sócios têm ainda o <b>Arquivo</b> (ícone de caixa no topo), onde o Claude organiza tudo por temas.</p>
 
       <button id="btn-sair" class="sair" type="button">Sair deste dispositivo</button>
     </div>
