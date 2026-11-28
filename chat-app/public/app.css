@@ -211,3 +211,9 @@ button{font:inherit;cursor:pointer}
 .bv-botoes button{border:0;background:var(--azul);color:#fff;font-weight:600;font-size:1rem;padding:12px 16px;border-radius:12px}
 .bv-botoes button.secundario{background:none;border:1px solid var(--linha);color:var(--tinta);font-weight:400}
 .boas-vindas .ajuda{margin-top:12px}
+.bv-botoes a{display:block;text-align:center;text-decoration:none;background:var(--azul);color:#fff;font-weight:600;font-size:1rem;padding:12px 16px;border-radius:12px}
+.bv-botoes a.secundario{background:none;border:1px solid var(--linha);color:var(--tinta);font-weight:400}
+.bv-botoes button:disabled{opacity:.7}
+.guia-lista{margin:0 0 8px;padding-left:1.2em;font-size:.85rem;color:var(--suave)}
+.guia-links{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.guia-links a{font-size:.85rem;color:var(--azul);font-weight:600}
