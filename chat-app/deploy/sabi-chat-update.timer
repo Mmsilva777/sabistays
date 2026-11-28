@@ -1,0 +1,9 @@
+[Unit]
+Description=Procura atualizações do chat Sabi Stays de 10 em 10 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

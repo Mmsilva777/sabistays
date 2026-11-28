@@ -16,6 +16,7 @@ Funciona no navegador do telemóvel ou do computador e pode instalar-se como app
   - zips até 50 MB: lista o conteúdo e lê os textos, até 8 fotos e 3 PDFs lá de dentro.
   Outros formatos (Word, Excel) ficam guardados e partilhados, mas o Claude ainda não os lê: exportem para PDF ou CSV.
 - **Arquivo por temas** (só sócios, ícone de caixa no topo): a cada 25 mensagens novas, ou 10 minutos depois de a conversa parar, o Claude arquiva sozinho as mensagens por tema (Legal, Finanças, Proprietários, Marketing, Operações, Fornecedores, Sócios e empresa, Site e ferramentas, Geral; podem criar mais). Para cada tema guarda um resumo atualizado e os dados importantes: decisões, números, contactos, tarefas e ideias. Há pesquisa, e cada tema pode ser descarregado em Markdown.
+- **Conselheiro**: o Claude não se limita a responder. Dá opinião e recomendações, aponta riscos e contradições com decisões anteriores e lembra prazos. Quando arquiva a conversa, pode ainda publicar um **alerta 💡** se detetar algo importante que ninguém disse (no máximo 3 por dia, só visível para os sócios; `CONSELHEIRO_ALERTAS_DIA=0` desliga).
 - **Memória que evolui**: o arquivo também mantém uma "Memória do Claude" com os factos e decisões principais. Essa memória e os resumos entram em todas as respostas do Claude, por isso ele lembra-se do que foi decidido semanas antes, mesmo fora das últimas 120 mensagens. Se algo mudar na conversa (ex.: a comissão passa a 18%), a memória é corrigida no arquivo seguinte.
 - As mensagens, ficheiros e arquivo ficam guardados no vosso servidor (`/var/lib/sabi-chat`). Para fazer cópia de segurança, basta copiar essa pasta.
 
@@ -63,7 +64,11 @@ No VPS atual, o projeto guesttv (em `/opt/guesttv`, Docker Compose) já tem um C
 | Link novo para alguém que mudou de telemóvel | `sabi-chat novo-link <id>` |
 | Retirar ou devolver o acesso | `sabi-chat desativar <id>` / `sabi-chat ativar <id>` |
 | Atualizar o chat para a versão mais recente | `cd /opt/sabistays && git pull && bash chat-app/deploy/atualizar.sh` |
+| Ver as atualizações automáticas | `journalctl -u sabi-chat-update -n 30 --no-pager` |
+| Desligar a atualização automática | `systemctl disable --now sabi-chat-update.timer` |
 | Ver erros | `journalctl -u sabi-chat -n 50` |
+
+**Atualização automática:** depois de correr o `atualizar.sh` uma vez, o servidor procura código novo no ramo `main` do GitHub de 10 em 10 minutos e atualiza-se sozinho (`deploy/auto-atualizar.sh`, `sabi-chat-update.timer`).
 
 Os convidados também se gerem diretamente no chat (botão de membros, no canto superior direito).
 
