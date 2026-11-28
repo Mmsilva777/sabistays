@@ -139,7 +139,7 @@ export class Store {
 
   // ---------- mensagens ----------
 
-  addMessage({ authorId, authorName, kind = "humano", text, replyTo = null, anexo = null }) {
+  addMessage({ authorId, authorName, kind = "humano", text, replyTo = null, anexo = null, soSocios = false }) {
     const msg = {
       id: newId(),
       at: new Date().toISOString(),
@@ -149,6 +149,7 @@ export class Store {
       text: String(text).slice(0, 8000),
       replyTo,
     };
+    if (soSocios) msg.soSocios = true; // alertas do conselheiro: convidados não veem
     if (anexo) msg.anexo = anexo; // { id, nome, tipo, categoria, tamanho, previas }
     this.messages.push(msg);
     fs.appendFileSync(this.messagesFile, JSON.stringify(msg) + "\n", { mode: 0o600 });
@@ -159,6 +160,7 @@ export class Store {
   visibleTo(member, { before = null, limit = 200 } = {}) {
     let list = this.messages;
     if (member.seesFrom) list = list.filter((m) => m.at >= member.seesFrom);
+    if (member.role !== "socio") list = list.filter((m) => !m.soSocios);
     if (before) list = list.filter((m) => m.at < before);
     return list.slice(-limit);
   }

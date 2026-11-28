@@ -146,8 +146,8 @@ function broadcast(event, data, filter = () => true) {
 }
 
 function broadcastMessage(msg) {
-  // Convidados só recebem mensagens posteriores à sua entrada (todas as novas são).
-  broadcast("mensagem", msg, (m) => !m.seesFrom || msg.at >= m.seesFrom);
+  // Convidados só recebem mensagens posteriores à sua entrada e nunca os alertas só para sócios.
+  broadcast("mensagem", msg, (m) => (!m.seesFrom || msg.at >= m.seesFrom) && (!msg.soSocios || m.role === "socio"));
 }
 
 function broadcastPresence() {
@@ -246,6 +246,7 @@ async function correrArquivo(motivo) {
       const { resultado, usage } = await arquivarLote({ client: arquivoClient, model: MODEL, arquivo, lote, contextoAnterior: anterior });
       store.addUsage(estimateCost(usage));
       arquivo.aplicar(resultado, lote);
+      publicarAlerta(resultado.alerta);
       const temas = Object.fromEntries(lote.map((m) => [m.id, arquivo.temasDe(m.id)]));
       broadcast("arquivo", { temas }, (m) => m.role === "socio");
     }
@@ -255,6 +256,17 @@ async function correrArquivo(motivo) {
   } finally {
     arquivando = false;
   }
+}
+
+// Alertas proativos do conselheiro (no máximo CONSELHEIRO_ALERTAS_DIA por dia; 0 desliga).
+const ALERTAS_DIA = Number(process.env.CONSELHEIRO_ALERTAS_DIA ?? 3);
+function publicarAlerta(alerta) {
+  if (!alerta?.mostrar || !String(alerta.texto || "").trim() || ALERTAS_DIA <= 0) return;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const jaHoje = store.messages.filter((m) => m.kind === "claude" && m.soSocios && m.at.startsWith(hoje)).length;
+  if (jaHoje >= ALERTAS_DIA) return;
+  const msg = store.addMessage({ authorId: "claude", authorName: "Claude", kind: "claude", text: "💡 " + String(alerta.texto).trim(), soSocios: true });
+  broadcastMessage(msg);
 }
 
 function agendarArquivo() {

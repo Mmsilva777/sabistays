@@ -1,0 +1,6 @@
+[Unit]
+Description=Atualização automática do chat Sabi Stays a partir do GitHub
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/sabistays/chat-app/deploy/auto-atualizar.sh
