@@ -9,6 +9,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ClaudeBot, MODEL, estimateCost } from "./lib/claude.mjs";
 import { Arquivo, arquivarLote } from "./lib/arquivo.mjs";
 import { Ficheiros, MAX_MB, TOTAL_MB } from "./lib/ficheiros.mjs";
+import { Push } from "./lib/push.mjs";
+import crypto from "node:crypto";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8787);
@@ -26,6 +28,7 @@ if (!fs.existsSync(CONTEXT_FILE)) {
 }
 const arquivo = new Arquivo(DATA_DIR);
 const ficheiros = new Ficheiros(DATA_DIR);
+const push = new Push(DATA_DIR);
 const claude = new ClaudeBot({ store, contextFile: CONTEXT_FILE, arquivo, ficheiros });
 // Arquivo automático: corre quando há ARQUIVO_LOTE mensagens novas ou ao fim de ARQUIVO_PAUSA_MIN minutos sem conversa.
 const ARQUIVO_LOTE = Number(process.env.ARQUIVO_LOTE || 25);
@@ -145,9 +148,35 @@ function broadcast(event, data, filter = () => true) {
   }
 }
 
-function broadcastMessage(msg) {
+function podeVer(m, msg) {
   // Convidados só recebem mensagens posteriores à sua entrada e nunca os alertas só para sócios.
-  broadcast("mensagem", msg, (m) => (!m.seesFrom || msg.at >= m.seesFrom) && (!msg.soSocios || m.role === "socio"));
+  return (!m.seesFrom || msg.at >= m.seesFrom) && (!msg.soSocios || m.role === "socio");
+}
+
+function broadcastMessage(msg) {
+  broadcast("mensagem", msg, (m) => podeVer(m, msg));
+  notificar(msg).catch((err) => console.error("notificações:", err.message));
+}
+
+// Notificação no telemóvel/PC para quem não tem o chat aberto à frente.
+async function notificar(msg) {
+  if (msg.kind === "sistema" || !push.subs.length) return;
+  const aVer = new Set([...clients].filter((c) => c.visivel).map((c) => c.member.id));
+  const corpoBase = (msg.text || "").replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+  const corpo = (corpoBase || (msg.anexo ? "📎 " + msg.anexo.nome : "")).slice(0, 180);
+  await push.enviar((memberId) => {
+    if (memberId === msg.authorId || aVer.has(memberId)) return null;
+    const m = store.getMember(memberId);
+    if (!m || !m.active || (m.expiresAt && new Date(m.expiresAt) < new Date()) || !podeVer(m, msg)) return null;
+    const primeiro = m.name.split(/\s+/)[0];
+    const mencao = new RegExp(`(^|[^\\w@])@(${primeiro.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|todos)\\b`, "i").test(msg.text || "");
+    return {
+      titulo: mencao ? `${msg.authorName} mencionou-te` : msg.kind === "claude" ? "Claude" : msg.authorName,
+      corpo: msg.anexo && corpoBase ? `📎 ${corpo}` : corpo,
+      urgente: mencao,
+      id: msg.id,
+    };
+  });
 }
 
 function broadcastPresence() {
@@ -391,7 +420,8 @@ async function api(req, res, url) {
       "X-Accel-Buffering": "no",
     });
     res.write("retry: 3000\n\n");
-    const client = { res, member: me };
+    const client = { res, member: me, cid: crypto.randomUUID(), visivel: url.searchParams.get("visivel") !== "0" };
+    res.write(`event: ola\ndata: ${JSON.stringify({ cid: client.cid })}\n\n`);
     clients.add(client);
     broadcastPresence();
     req.on("close", () => {
@@ -399,6 +429,28 @@ async function api(req, res, url) {
       broadcastPresence();
     });
     return;
+  }
+
+  if (p === "/api/visivel" && method === "POST") {
+    const { cid, visivel } = await readJson(req);
+    for (const c of clients) if (c.cid === cid && c.member.id === me.id) c.visivel = !!visivel;
+    return send(res, 200, { ok: true });
+  }
+
+  // ----- notificações push -----
+  if (p === "/api/push" && method === "GET") {
+    const endpoint = url.searchParams.get("endpoint");
+    return send(res, 200, { chave: push.publica, ativo: endpoint ? push.tem(me.id, endpoint) : false });
+  }
+  if (p === "/api/push" && method === "POST") {
+    const { sub } = await readJson(req);
+    if (!push.subscrever(me.id, sub)) return send(res, 400, { erro: "subscrição inválida" });
+    return send(res, 200, { ok: true });
+  }
+  if (p === "/api/push" && method === "DELETE") {
+    const { endpoint } = await readJson(req);
+    push.cancelar(me.id, endpoint ? String(endpoint) : null);
+    return send(res, 200, { ok: true });
   }
 
   // ----- ficheiros -----
@@ -464,11 +516,13 @@ async function api(req, res, url) {
     if (target.role !== "convidado") return send(res, 403, { erro: "os sócios gerem-se no servidor" });
     if (m[2] === "novo-link") {
       const { token } = store.resetToken(target.id);
+      push.cancelar(target.id);
       return send(res, 200, { link: inviteLink(req, token) });
     }
     store.setActive(target.id, m[2] === "ativar");
     if (m[2] === "desativar") {
       for (const c of clients) if (c.member.id === target.id) { c.res.end(); clients.delete(c); }
+      push.cancelar(target.id);
       const sys = store.addMessage({ authorId: null, authorName: "Sistema", kind: "sistema", text: `${me.name} retirou o acesso a ${target.name}.` });
       broadcastMessage(sys);
     }
@@ -545,7 +599,7 @@ function serveStatic(req, res, url) {
   fs.readFile(file, (err, buf) => {
     if (err) return send(res, 404, "não encontrado");
     const ext = path.extname(file);
-    const cache = ext === ".html" || ext === ".webmanifest" ? "no-cache" : "public, max-age=86400";
+    const cache = [".html", ".webmanifest", ".js", ".css"].includes(ext) ? "no-cache" : "public, max-age=86400";
     res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": MIME[ext] || "application/octet-stream", "Cache-Control": cache });
     res.end(buf);
   });

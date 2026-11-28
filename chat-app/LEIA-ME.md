@@ -72,6 +72,18 @@ No VPS atual, o projeto guesttv (em `/opt/guesttv`, Docker Compose) já tem um C
 
 Os convidados também se gerem diretamente no chat (botão de membros, no canto superior direito).
 
+## Instalar como app (telemóvel e PC)
+
+O chat é uma app web instalável: fica com o ícone da Sabi Stays, abre numa janela própria e mostra notificações. Não passa pelas lojas de apps.
+
+- **Android:** abrir o link pessoal no Chrome, menu ⋮ → **Instalar app**.
+- **iPhone/iPad (iOS 16.4 ou mais recente):** abrir o link pessoal no **Safari**, Partilhar → **Adicionar ao ecrã principal**. Ao abrir a app pela primeira vez, colar o link pessoal no ecrã de entrada (no iPhone a app não partilha a sessão do Safari).
+- **Windows/Mac:** abrir o link no Chrome ou no Edge e clicar no ícone de instalar na barra de endereço. Fica no menu Iniciar e na barra de tarefas.
+
+Depois, no botão de membros → **App e notificações** → **Ativar notificações**. Cada pessoa recebe um aviso das mensagens novas quando não tem o chat aberto, e um aviso que fica no ecrã quando alguém escreve `@nome` ou `@todos`.
+
+As chaves das notificações (VAPID) são criadas sozinhas no primeiro arranque, em `vapid.json` na pasta de dados. Não é preciso configurar nada. Um link novo (`novo-link`) ou um acesso retirado (`desativar`) desliga também as notificações dos aparelhos antigos dessa pessoa.
+
 ## Experimentar no computador
 
 ```bash

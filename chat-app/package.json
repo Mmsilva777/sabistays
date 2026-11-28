@@ -5,12 +5,15 @@
   "description": "Chat interno da Sabi Stays: sócios, convidados e o Claude quando chamado.",
   "type": "module",
   "main": "server.mjs",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.mjs",
     "admin": "node admin.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.14.0"
+    "@anthropic-ai/sdk": "^1.14.0",
+    "web-push": "^3.6.7"
   }
 }

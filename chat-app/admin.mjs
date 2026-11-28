@@ -8,9 +8,13 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./lib/store.mjs";
+import { Push } from "./lib/push.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const store = new Store(process.env.DADOS || path.join(here, "data"));
+const dados = process.env.DADOS || path.join(here, "data");
+const store = new Store(dados);
+// Um link novo ou um acesso retirado também desliga as notificações dos aparelhos antigos.
+const desligarNotificacoes = (id) => new Push(dados).cancelar(id);
 const base = (process.env.URL_PUBLICO || `http://localhost:${process.env.PORT || 8787}`).replace(/\/$/, "");
 const link = (token) => `${base}/entrar#${token}`;
 
@@ -37,12 +41,14 @@ try {
       break;
     case "novo-link": {
       const { member, token } = store.resetToken(a);
+      desligarNotificacoes(member.id);
       console.log(`Novo link para ${member.name}:\n${link(token)}`);
       break;
     }
     case "desativar":
     case "ativar": {
       const m = store.setActive(a, cmd === "ativar");
+      if (!m.active) desligarNotificacoes(m.id);
       console.log(`${m.name}: ${m.active ? "ativo" : "sem acesso"}.`);
       break;
     }
