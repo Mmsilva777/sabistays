@@ -23,7 +23,7 @@ try {
   switch (cmd) {
     case "novo-socio": {
       const { member, token } = store.addMember({ name: a, role: "socio" });
-      console.log(`Sócio ${member.name} criado (id ${member.id}).\nLink pessoal (enviar só a esta pessoa):\n${link(token)}`);
+      console.log(`Sócio ${member.name} criado (id ${member.id}).\nLink pessoal (enviar só a esta pessoa; ao abri-lo, o chat guia a instalação da app):\n${link(token)}`);
       break;
     }
     case "novo-convidado": {
@@ -42,7 +42,7 @@ try {
     case "novo-link": {
       const { member, token } = store.resetToken(a);
       desligarNotificacoes(member.id);
-      console.log(`Novo link para ${member.name}:\n${link(token)}`);
+      console.log(`Novo link para ${member.name} (o antigo deixou de funcionar; ao abri-lo, o chat guia a instalação da app):\n${link(token)}`);
       break;
     }
     case "desativar":

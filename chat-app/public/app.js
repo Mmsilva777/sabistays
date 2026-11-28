@@ -27,6 +27,8 @@
 
   // ---------- entrada ----------
 
+  let linkUsado = null; // o link pessoal acabado de abrir (para o ecrã de boas-vindas)
+
   async function entrar() {
     // Link pessoal: /entrar#TOKEN. O token vai no fragmento para não ficar em registos do servidor.
     if (location.pathname === "/entrar" && location.hash.length > 1) {
@@ -34,6 +36,7 @@
       history.replaceState(null, "", "/");
       try {
         await pedir("/api/entrar", { method: "POST", body: JSON.stringify({ token }) });
+        linkUsado = location.origin + "/entrar#" + encodeURIComponent(token);
       } catch {
         mostrarPorta("Este link já não é válido. Pede um link novo a um dos sócios.");
         return;
@@ -59,7 +62,8 @@
     desenharTudo();
     ligarEventos();
     estadoApp();
-    texto.focus();
+    if (linkUsado && !instalada()) mostrarBoasVindas();
+    else texto.focus();
   }
 
   function mostrarPorta(msg) {
@@ -832,8 +836,80 @@
     e.preventDefault();
     pedidoInstalar = e;
     estadoApp();
+    if (!$("boas-vindas").hidden) desenharBoasVindas();
   });
-  window.addEventListener("appinstalled", () => { pedidoInstalar = null; estadoApp(); });
+  window.addEventListener("appinstalled", () => {
+    pedidoInstalar = null;
+    estadoApp();
+    if (!$("boas-vindas").hidden) {
+      $("bv-passos").innerHTML = "";
+      $("bv-instalar").hidden = true;
+      $("bv-nota").innerHTML = "✓ App instalada. Abre a <b>Sabi Chat</b> " + (ehAndroid || ehIOS ? "no ecrã principal" : "no menu Iniciar ou na barra de tarefas") + " e ativa as notificações quando ela pedir.";
+      $("bv-continuar").textContent = "Fechar";
+    }
+  });
+
+  // ---------- boas-vindas (instalação guiada a partir do link pessoal) ----------
+
+  function mostrarBoasVindas() {
+    $("bv-titulo").textContent = `Olá, ${eu.name.split(/\s+/)[0]}!`;
+    desenharBoasVindas();
+    $("boas-vindas").hidden = false;
+  }
+
+  function desenharBoasVindas() {
+    if ($("boas-vindas").hidden && !linkUsado) return;
+    const ehSafariIOS = ehIOS && !/CriOS|FxiOS|EdgiOS/.test(ua);
+    let passos = [];
+    let nota = "";
+    $("bv-instalar").hidden = !pedidoInstalar;
+    $("bv-copiar").hidden = !ehIOS;
+    if (pedidoInstalar) {
+      passos = [];
+      nota = "Carrega em <b>Instalar app</b> e confirma. Ficas logo com a sessão iniciada.";
+    } else if (ehIOS) {
+      passos = [
+        "Carrega em <b>Copiar o meu link</b> (vais precisar dele no passo 4).",
+        ehSafariIOS ? "Toca em <b>Partilhar</b> (o quadrado com a seta para cima)." : "Abre este link no <b>Safari</b> e toca em <b>Partilhar</b> (o quadrado com a seta).",
+        "Escolhe <b>Adicionar ao ecrã principal</b> e depois <b>Adicionar</b>.",
+        "Abre a app <b>Sabi Chat</b> no ecrã principal, cola o link e carrega em <b>Entrar</b>.",
+        "Dentro da app: botão de membros → <b>Ativar notificações</b>.",
+      ];
+    } else if (ehAndroid) {
+      passos = [
+        "No Chrome, toca no menu <b>⋮</b> (canto superior direito).",
+        "Escolhe <b>Instalar app</b> (ou <b>Adicionar ao ecrã principal</b>) e confirma.",
+        "Abre a <b>Sabi Chat</b> no ecrã principal e ativa as notificações.",
+      ];
+    } else {
+      passos = [
+        "Usa o <b>Chrome</b> ou o <b>Edge</b>.",
+        "Clica no ícone de instalar à direita da barra de endereço (ou menu <b>⋮</b> → <b>Instalar Sabi Chat</b>).",
+        "A app fica no menu Iniciar e na barra de tarefas. Ativa as notificações quando ela pedir.",
+      ];
+    }
+    $("bv-passos").innerHTML = passos.map((p) => `<li>${p}</li>`).join("");
+    $("bv-nota").innerHTML = nota;
+  }
+
+  $("bv-instalar").addEventListener("click", async () => {
+    if (!pedidoInstalar) return;
+    pedidoInstalar.prompt();
+    const escolha = await pedidoInstalar.userChoice.catch(() => ({}));
+    if (escolha.outcome !== "accepted") desenharBoasVindas();
+  });
+  $("bv-copiar").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(linkUsado);
+      $("bv-copiar").textContent = "Link copiado ✓";
+    } catch {
+      prompt("Copia o teu link:", linkUsado);
+    }
+  });
+  $("bv-continuar").addEventListener("click", () => {
+    $("boas-vindas").hidden = true;
+    texto.focus();
+  });
 
   function chaveBytes(b64) {
     const pad = "=".repeat((4 - (b64.length % 4)) % 4);
