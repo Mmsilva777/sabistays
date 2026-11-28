@@ -1,0 +1,13 @@
+{
+  "name": "Sabi Stays · Chat",
+  "short_name": "Sabi Chat",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EFE6D8",
+  "theme_color": "#0B5F66",
+  "lang": "pt-PT",
+  "icons": [
+    { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
