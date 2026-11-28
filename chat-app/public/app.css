@@ -150,3 +150,8 @@ button{font:inherit;cursor:pointer}
 .conversa > li{background:var(--cartao);border-radius:10px;padding:8px 10px;margin-bottom:6px;font-size:.9rem;box-shadow:var(--sombra);overflow-wrap:anywhere}
 .conversa small{color:var(--suave);font-size:.75rem}
 .conversa p{margin:0 0 .4em}
+
+/* arrastar e largar */
+.largar{position:fixed;inset:0;z-index:20;background:rgba(11,95,102,.82);display:grid;place-items:center;pointer-events:none}
+.largar div{border:3px dashed #fff;border-radius:24px;padding:40px 32px;color:#fff;font-weight:600;font-size:1.3rem;text-align:center;max-width:90%}
+.largar small{display:block;font-weight:400;font-size:.9rem;opacity:.9;margin-top:6px}

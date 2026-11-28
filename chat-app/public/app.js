@@ -477,19 +477,82 @@
   }
 
   $("btn-anexo").addEventListener("click", () => $("ficheiro").click());
-  $("ficheiro").addEventListener("change", () => {
-    const f = $("ficheiro").files[0];
-    if (!f) return;
-    if (f.size > maxMb * 1024 * 1024) {
-      alertaSistema(`"${f.name}" tem ${tamanhoLegivel(f.size)}. O máximo por ficheiro é ${maxMb} MB.`);
-      $("ficheiro").value = "";
-      return;
-    }
+  function grandeDemais(f) {
+    if (f.size <= maxMb * 1024 * 1024) return false;
+    alertaSistema(`"${f.name}" tem ${tamanhoLegivel(f.size)}. O máximo por ficheiro é ${maxMb} MB.`);
+    return true;
+  }
+
+  function escolherFicheiro(f) {
+    if (!f || grandeDemais(f)) return;
     ficheiroEscolhido = f;
     $("anexo-nome").textContent = `${f.name} (${tamanhoLegivel(f.size)})`;
     $("anexo-barra").style.width = "0%";
     $("anexo-escolhido").hidden = false;
     texto.focus();
+  }
+
+  // Vários ficheiros de uma vez: cada um segue numa mensagem própria.
+  async function enviarVarios(lista) {
+    for (const f of lista) {
+      if (grandeDemais(f)) continue;
+      escolherFicheiro(f);
+      try {
+        const anexo = await enviarFicheiro(f);
+        const r = await pedir("/api/mensagens", { method: "POST", body: JSON.stringify({ texto: "", anexo }) });
+        juntarMensagem(r.mensagem);
+      } catch (err) {
+        alertaSistema(`Não foi possível enviar "${f.name}": ${err.message}`);
+      }
+    }
+    limparFicheiro();
+  }
+
+  function receberFicheiros(lista) {
+    const fs = [...lista].filter((f) => f && f.size > 0);
+    if (!fs.length) return;
+    if (fs.length === 1) escolherFicheiro(fs[0]);
+    else enviarVarios(fs);
+  }
+
+  $("ficheiro").addEventListener("change", () => {
+    receberFicheiros($("ficheiro").files);
+    $("ficheiro").value = "";
+  });
+
+  // Arrastar e largar ficheiros para a janela do chat.
+  let arrastos = 0;
+  const temFicheiros = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  window.addEventListener("dragenter", (e) => {
+    if (!temFicheiros(e) || $("app").hidden) return;
+    e.preventDefault();
+    arrastos++;
+    $("largar").hidden = false;
+  });
+  window.addEventListener("dragover", (e) => {
+    if (!temFicheiros(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+  window.addEventListener("dragleave", (e) => {
+    if (!temFicheiros(e)) return;
+    arrastos = Math.max(0, arrastos - 1);
+    if (!arrastos) $("largar").hidden = true;
+  });
+  window.addEventListener("drop", (e) => {
+    if (!temFicheiros(e)) return;
+    e.preventDefault();
+    arrastos = 0;
+    $("largar").hidden = true;
+    if (!$("app").hidden) receberFicheiros(e.dataTransfer.files);
+  });
+
+  // Colar uma imagem (Ctrl+V) na caixa de texto.
+  texto.addEventListener("paste", (e) => {
+    const fs = [...(e.clipboardData?.files || [])];
+    if (!fs.length) return;
+    e.preventDefault();
+    receberFicheiros(fs);
   });
   $("btn-tirar-anexo").addEventListener("click", limparFicheiro);
 

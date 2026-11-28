@@ -52,7 +52,7 @@
     </div>
 
     <form id="compor" class="compor" autocomplete="off">
-      <input id="ficheiro" type="file" hidden>
+      <input id="ficheiro" type="file" multiple hidden>
       <button type="button" id="btn-anexo" class="clip" aria-label="Anexar ficheiro, foto, vídeo ou zip" title="Anexar ficheiro, foto, vídeo ou zip">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v10.5a1.5 1.5 0 0 1-3 0V6.5H9v9a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10h-1.5Z"/></svg>
       </button>
@@ -63,6 +63,8 @@
       </button>
     </form>
   </section>
+
+  <div id="largar" class="largar" hidden><div>Larga aqui para enviar<small>fotos, vídeos, PDFs, zips (até 50 MB cada)</small></div></div>
 
   <!-- Arquivo por temas -->
   <section id="arquivo" class="arquivo" hidden aria-label="Arquivo">
@@ -117,7 +119,7 @@
 
       <h3>Como usar o Claude</h3>
       <p class="ajuda">Escreve <b>@claude</b> numa mensagem e ele responde, tendo em conta a conversa recente e o contexto da Sabi Stays. Sem @claude, ele não intervém.</p>
-      <p class="ajuda">Podes enviar fotos, vídeos, PDFs e zips com o clipe (até 50 MB). O Claude vê os últimos anexos quando é chamado. Os sócios têm ainda o <b>Arquivo</b> (ícone de caixa no topo), onde o Claude organiza tudo por temas.</p>
+      <p class="ajuda">Podes enviar fotos, vídeos, PDFs e zips com o clipe, arrastando-os para a janela ou colando com Ctrl+V (até 50 MB cada). O Claude vê os últimos anexos quando é chamado. Os sócios têm ainda o <b>Arquivo</b> (ícone de caixa no topo), onde o Claude organiza tudo por temas.</p>
 
       <button id="btn-sair" class="sair" type="button">Sair deste dispositivo</button>
     </div>
