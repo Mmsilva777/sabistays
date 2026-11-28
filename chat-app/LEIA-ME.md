@@ -36,6 +36,16 @@ Funciona no navegador do telemóvel ou do computador e pode instalar-se como app
 
 Se o servidor já tiver um Caddyfile com o site, o script acrescenta só o bloco do chat (ver `deploy/Caddyfile.exemplo`).
 
+### Quando as portas 80/443 já são de um Caddy em Docker (caso do VPS da Sabi Stays)
+
+No VPS atual, o projeto guesttv (em `/opt/guesttv`, Docker Compose) já tem um Caddy em Docker com as portas da web. Nesse caso:
+
+1. Desligar o Caddy do sistema: `systemctl disable --now caddy`.
+2. Pôr o chat a ouvir no gateway da rede Docker do guesttv (`docker network inspect guesttv_internal` mostra o Gateway, ex. 172.18.0.1): em `/etc/sabi-chat.env`, `HOST=172.18.0.1`, e `systemctl restart sabi-chat`.
+3. Acrescentar ao `/opt/guesttv/Caddyfile` o bloco de `deploy/Caddyfile.exemplo`, com `reverse_proxy 172.18.0.1:8787`.
+4. Com o ufw ativo, deixar a rede Docker chegar ao chat: `ufw allow in on br-<id da rede> to 172.18.0.1 port 8787 proto tcp`.
+5. Recarregar: `docker exec -w /etc/caddy guesttv-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`.
+
 ## Gestão no dia a dia
 
 | Para quê | Comando no servidor |
